@@ -1,0 +1,26 @@
+body {
+    background-color: #222; /* Fond sombre pour faire ressortir la glace */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    font-family: sans-serif;
+    color: white;
+}
+
+#game-container {
+    text-align: center;
+    position: relative;
+}
+
+canvas {
+    background-color: #fff; /* La glace */
+    border: 5px solid #b00; /* Les bandes */
+    border-radius: 100px; /* Les coins arrondis de la patinoire */
+    box-shadow: 0 0 30px rgba(0,0,0,0.5); /* Une petite ombre pour le style */
+}
+
+#ui-layer {
+    margin-top: 15px;
+}
