@@ -28,9 +28,69 @@ class Rink {
     }
 }
 
+class Puck {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 8;
+        this.vx = 0; // Vitesse horizontale
+        this.vy = 0; // Vitesse verticale
+        this.friction = 0.99; // Frottement : on garde 99% de la vitesse à chaque image
+    }
+
+    update(boundsWidth, boundsHeight) {
+        // 1. Mouvement
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // 2. Frottement (ça ralentit tout seul)
+        this.vx *= this.friction;
+        this.vy *= this.friction;
+
+        // 3. Rebond sur les bandes
+        // Gauche ou Droite
+        if (this.x - this.radius < 0) {
+            this.x = this.radius;
+            this.vx *= -1; // On inverse la vitesse horizontale
+        } else if (this.x + this.radius > boundsWidth) {
+            this.x = boundsWidth - this.radius;
+            this.vx *= -1;
+        }
+
+        // Haut ou Bas
+        if (this.y - this.radius < 0) {
+            this.y = this.radius;
+            this.vy *= -1; // On inverse la vitesse verticale
+        } else if (this.y + this.radius > boundsHeight) {
+            this.y = boundsHeight - this.radius;
+            this.vy *= -1;
+        }
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "black";
+        ctx.fill();
+    }
+}
+
 class Game {
     constructor() {
         this.rink = new Rink('ice-rink');
+        this.puck = new Puck(this.rink.width / 2, this.rink.height / 2);
+        this.running = false;
+
+        // Gestion du bouton Lecture
+        document.getElementById('start-btn').addEventListener('click', () => {
+            this.running = !this.running;
+            
+            // Petite impulsion au démarrage pour tester si le palet est à l'arrêt
+            if (this.running && Math.abs(this.puck.vx) < 0.1) {
+                this.puck.vx = (Math.random() - 0.5) * 20;
+                this.puck.vy = (Math.random() - 0.5) * 20;
+            }
+        });
         
         // On lance la boucle d'animation
         this.animate = this.animate.bind(this);
@@ -38,7 +98,12 @@ class Game {
     }
 
     animate() {
+        if (this.running) {
+            this.puck.update(this.rink.width, this.rink.height);
+        }
+
         this.rink.draw();
+        this.puck.draw(this.rink.ctx);
         requestAnimationFrame(this.animate);
     }
 }
