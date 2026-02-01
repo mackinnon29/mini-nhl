@@ -75,10 +75,47 @@ class Puck {
     }
 }
 
+class Player {
+    constructor(x, y, team, number, role) {
+        this.x = x;
+        this.y = y;
+        this.team = team; // 'home' ou 'away'
+        this.number = number;
+        this.role = role; // 'goalie' ou 'forward'
+        this.radius = 15; // Un peu plus gros que le palet
+    }
+
+    draw(ctx) {
+        // Cercle du joueur
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        // Rouge pour domicile, Bleu pour extérieur
+        ctx.fillStyle = (this.team === 'home') ? '#cc0000' : '#0033cc';
+        ctx.fill();
+        
+        // Bordure blanche
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Numéro du joueur
+        ctx.fillStyle = "white";
+        ctx.font = "bold 12px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(this.number, this.x, this.y);
+    }
+}
+
 class Game {
     constructor() {
         this.rink = new Rink('ice-rink');
         this.puck = new Puck(this.rink.width / 2, this.rink.height / 2);
+        
+        // Création des équipes
+        this.players = [];
+        this.initTeams();
+
         this.running = false;
 
         // Gestion du bouton Lecture
@@ -97,12 +134,31 @@ class Game {
         requestAnimationFrame(this.animate);
     }
 
+    initTeams() {
+        const w = this.rink.width;
+        const h = this.rink.height;
+
+        // Équipe Domicile (Rouge) - À gauche
+        this.players.push(new Player(100, h / 2, 'home', 30, 'goalie'));
+        this.players.push(new Player(300, h / 2 - 100, 'home', 10, 'forward'));
+        this.players.push(new Player(300, h / 2 + 100, 'home', 88, 'forward'));
+
+        // Équipe Extérieur (Bleu) - À droite
+        this.players.push(new Player(w - 100, h / 2, 'away', 31, 'goalie'));
+        this.players.push(new Player(w - 300, h / 2 - 100, 'away', 9, 'forward'));
+        this.players.push(new Player(w - 300, h / 2 + 100, 'away', 97, 'forward'));
+    }
+
     animate() {
         if (this.running) {
             this.puck.update(this.rink.width, this.rink.height);
         }
 
         this.rink.draw();
+        
+        // Dessiner les joueurs
+        this.players.forEach(player => player.draw(this.rink.ctx));
+        
         this.puck.draw(this.rink.ctx);
         requestAnimationFrame(this.animate);
     }
