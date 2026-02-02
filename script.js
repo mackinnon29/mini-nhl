@@ -526,8 +526,8 @@ class Player {
             return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight, game);
         }
 
-        // Tirer si en zone de tir - probabilité augmentée pour plus de tirs
-        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.40) {
+        // Tirer si en zone de tir - 55% de chances de tirer
+        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.55) {
             const shotY = goalY + (Math.random() - 0.5) * 60;
             this.hasPuck = false;  // IMPORTANT: marquer comme n'ayant plus le palet AVANT le tir
             puck.shoot(goalX, shotY, SHOT_POWER);
@@ -536,8 +536,8 @@ class Player {
             return { action: true };
         }
 
-        // Tir moins fréquent même avec 2 adversaires proches en zone offensive
-        if (inShotZone && nearbyOpponents <= 2 && Math.random() < 0.15) {
+        // Tir sous pression (2 adversaires proches) - 35% de chances
+        if (inShotZone && nearbyOpponents <= 2 && Math.random() < 0.35) {
             const shotY = goalY + (Math.random() - 0.5) * 80;
             this.hasPuck = false;
             puck.shoot(goalX, shotY, SHOT_POWER * 0.9);  // Tir légèrement moins puissant car sous pression
@@ -546,14 +546,14 @@ class Player {
             return { action: true };
         }
 
-        // Passe sous pression proche - réduit en zone offensive car on préfère tirer
-        const passProbUnderPressure = inShotZone ? 0.45 : 0.70;
+        // Passe sous pression proche - réduit en zone offensive (préférer tirer)
+        const passProbUnderPressure = inShotZone ? 0.30 : 0.60;
         if (veryCloseOpponents >= 1 && this.passCooldown === 0 && Math.random() < passProbUnderPressure) {
             return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight, game);
         }
 
-        // Passe proactive - réduite en zone offensive pour favoriser les tirs
-        const proactivePassProb = inShotZone ? 0.08 : 0.15;
+        // Passe proactive - très réduite en zone offensive
+        const proactivePassProb = inShotZone ? 0.05 : 0.12;
         if (this.passCooldown === 0 && Math.random() < proactivePassProb) {
             const passTarget = this.findBestPassTarget(allPlayers, rinkWidth);
             if (passTarget) {
@@ -925,8 +925,8 @@ class Game {
             const distFromCenter = Math.abs(this.puck.y - centerY);
             const centerZone = this.rink.height * 0.25;  // Zone centrale = 50% du milieu
 
-            // Probabilité de but : 20% du centre, 10% des côtés
-            const goalProbability = distFromCenter < centerZone ? 0.20 : 0.10;
+            // Probabilité de but : 55% peu importe la zone
+            const goalProbability = 0.55;
 
             if (Math.random() < goalProbability) {
                 // BUT !
