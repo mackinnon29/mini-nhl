@@ -545,6 +545,11 @@ class Game {
         this.passPriorityTimer = 0;  // Timer de priorité pour le receveur
         this.passingTeam = null;     // Équipe qui a fait la passe (pour bloquer les interceptions)
 
+        // Système de score
+        this.scoreHome = 0;
+        this.scoreAway = 0;
+        this.goalCooldown = 0;  // Empêche les buts multiples
+
         this.running = false;
 
         document.getElementById('start-btn').addEventListener('click', () => {
@@ -584,6 +589,9 @@ class Game {
 
     animate() {
         if (this.running) {
+            // Décrémenter le cooldown de but
+            if (this.goalCooldown > 0) this.goalCooldown--;
+
             // 1. Mettre à jour le palet (mouvement si libre)
             this.puck.update(this.rink.width, this.rink.height);
 
@@ -597,12 +605,117 @@ class Game {
 
             // 4. Mettre à jour le contrôle du palet (en dernier pour permettre les passes)
             this.checkPuckControl();
+
+            // 5. Vérifier si un but est marqué
+            this.checkGoal();
         }
 
         this.rink.draw();
+        this.drawScore();
         this.players.forEach(player => player.draw(this.rink.ctx));
         this.puck.draw(this.rink.ctx);
         requestAnimationFrame(this.animate);
+    }
+
+    checkGoal() {
+        if (this.goalCooldown > 0) return;  // Éviter les buts multiples
+
+        const goalLineOffset = 60;
+        const goalWidth = 80;
+        const goalTop = this.rink.height / 2 - goalWidth / 2;
+        const goalBottom = this.rink.height / 2 + goalWidth / 2;
+
+        // Vitesse du palet pour déterminer si c'est un tir
+        const puckSpeed = Math.sqrt(this.puck.vx * this.puck.vx + this.puck.vy * this.puck.vy);
+        if (puckSpeed < 3) return;  // Pas assez rapide pour être un tir
+
+        // Vérifier si le palet est dans une cage
+        let scoringTeam = null;
+
+        // But dans la cage de gauche (home défend) -> away marque
+        if (this.puck.x <= goalLineOffset &&
+            this.puck.y >= goalTop &&
+            this.puck.y <= goalBottom) {
+            scoringTeam = 'away';
+        }
+        // But dans la cage de droite (away défend) -> home marque
+        else if (this.puck.x >= this.rink.width - goalLineOffset &&
+            this.puck.y >= goalTop &&
+            this.puck.y <= goalBottom) {
+            scoringTeam = 'home';
+        }
+
+        if (scoringTeam) {
+            // Calculer si le tir venait du centre ou des côtés
+            const centerY = this.rink.height / 2;
+            const distFromCenter = Math.abs(this.puck.y - centerY);
+            const centerZone = this.rink.height * 0.25;  // Zone centrale = 50% du milieu
+
+            // Probabilité de but : 20% du centre, 10% des côtés
+            const goalProbability = distFromCenter < centerZone ? 0.20 : 0.10;
+
+            if (Math.random() < goalProbability) {
+                // BUT !
+                if (scoringTeam === 'home') {
+                    this.scoreHome++;
+                } else {
+                    this.scoreAway++;
+                }
+                console.log(`⚽ BUT ! Score: Home ${this.scoreHome} - ${this.scoreAway} Away`);
+                this.resetAfterGoal();
+            }
+            this.goalCooldown = 30;  // Cooldown pour éviter les détections multiples
+        }
+    }
+
+    resetAfterGoal() {
+        // Remettre le palet au centre
+        this.puck.x = this.rink.width / 2;
+        this.puck.y = this.rink.height / 2;
+        this.puck.vx = 0;
+        this.puck.vy = 0;
+        this.puck.release();
+
+        // Libérer le porteur du palet
+        if (this.puckCarrier) {
+            this.puckCarrier.hasPuck = false;
+        }
+        this.puckCarrier = null;
+        this.teamWithPuck = null;
+        this.passTarget = null;
+        this.passPriorityTimer = 0;
+        this.passingTeam = null;
+
+        // Remettre les joueurs à leurs positions de départ
+        this.players.forEach(player => {
+            player.x = player.homeX;
+            player.y = player.homeY;
+            player.hasPuck = false;
+            player.passCooldown = 0;
+            player.possessionTime = 0;
+            player.contestedFrames = 0;
+        });
+
+        // Petite pause puis relancer
+        this.goalCooldown = 60;  // ~1 seconde de pause
+    }
+
+    drawScore() {
+        const ctx = this.rink.ctx;
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+
+        // Score équipe Home (rouge)
+        ctx.fillStyle = '#cc0000';
+        ctx.fillText(this.scoreHome.toString(), this.rink.width / 2 - 40, 35);
+
+        // Tiret
+        ctx.fillStyle = '#333';
+        ctx.fillText('-', this.rink.width / 2, 35);
+
+        // Score équipe Away (bleu)
+        ctx.fillStyle = '#0033cc';
+        ctx.fillText(this.scoreAway.toString(), this.rink.width / 2 + 40, 35);
     }
 
     checkPuckControl() {
