@@ -1,11 +1,15 @@
 // ==================== CONSTANTES DE JEU ====================
 const PUCK_CONTROL_DISTANCE = 25;  // Distance pour contrôler le palet
 const SHOT_POWER = 12;             // Puissance des tirs
-const PASS_POWER = 8;              // Puissance des passes
+const PASS_POWER = 10;             // Puissance des passes (augmentée)
 const PRESSURE_DISTANCE = 60;      // Distance considérée comme "sous pression"
+const CLOSE_PRESSURE_DISTANCE = 35; // Distance très proche (duel)
 const SHOT_ZONE_RATIO = 0.35;      // Zone de tir (35% depuis le but adverse)
-const PASS_COOLDOWN = 30;          // Frames avant de pouvoir repasser
+const PASS_COOLDOWN = 15;          // Frames avant de pouvoir repasser (très court)
 const SPREAD_DISTANCE = 80;        // Distance minimale entre coéquipiers
+const CONTESTED_THRESHOLD = 40;    // Frames sous pression avant dégagement forcé (réduit)
+const CLEAR_POWER = 10;            // Puissance du dégagement
+const MAX_POSSESSION_TIME = 60;    // Frames max avec le palet avant passe forcée (~1s)
 
 class Rink {
     constructor(canvasId) {
@@ -150,6 +154,8 @@ class Player {
         this.speed = 2.5;
         this.hasPuck = false;
         this.passCooldown = 0; // Empêche les passes trop rapides
+        this.contestedFrames = 0; // Compteur de frames sous pression intense
+        this.possessionTime = 0; // Temps de possession du palet
     }
 
     // Distance vers un point
@@ -192,6 +198,17 @@ class Player {
             if (result.action) return; // Action effectuée (tir/passe)
             targetX = result.targetX;
             targetY = result.targetY;
+        } else if (game.teamWithPuck === null) {
+            // === PALET LIBRE - Chasser le palet ===
+            if (this.role === 'forward') {
+                // Attaquants : chasser le palet
+                targetX = puck.x;
+                targetY = puck.y;
+            } else {
+                // Défenseurs : rester en position mais suivre un peu le palet
+                targetX = this.homeX;
+                targetY = puck.y * 0.3 + this.homeY * 0.7;
+            }
         } else if (game.teamWithPuck === this.team) {
             // === ÉQUIPE EN POSSESSION (mais pas moi) ===
             const result = this.updateTeamHasPuck(puck, allPlayers, rinkWidth, rinkHeight);
@@ -212,6 +229,9 @@ class Player {
         const goalX = this.getTargetGoalX(rinkWidth);
         const goalY = rinkHeight / 2;
 
+        // Incrémenter le temps de possession
+        this.possessionTime++;
+
         // Zone de tir ?
         const inShotZone = this.team === 'home'
             ? this.x > rinkWidth * (1 - SHOT_ZONE_RATIO)
@@ -219,21 +239,43 @@ class Player {
 
         // Compter les adversaires proches
         const nearbyOpponents = this.countNearbyOpponents(allPlayers, PRESSURE_DISTANCE);
+        const veryCloseOpponents = this.countNearbyOpponents(allPlayers, CLOSE_PRESSURE_DISTANCE);
+
+        // Gestion de la contestation (duel)
+        if (veryCloseOpponents >= 1) {
+            this.contestedFrames++;
+        } else {
+            this.contestedFrames = Math.max(0, this.contestedFrames - 2);
+        }
+
+        // PASSE FORCÉE si possession trop longue OU contesté trop longtemps
+        if (this.possessionTime >= MAX_POSSESSION_TIME || this.contestedFrames >= CONTESTED_THRESHOLD) {
+            return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight);
+        }
 
         // Tirer si en zone de tir et relativement démarqué
-        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.05) {
+        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.1) {
             const shotY = goalY + (Math.random() - 0.5) * 60;
             puck.shoot(goalX, shotY, SHOT_POWER);
             this.hasPuck = false;
+            this.possessionTime = 0;
+            this.contestedFrames = 0;
             return { action: true };
         }
 
-        // Sous pression ? Chercher une passe
-        if (nearbyOpponents >= 2 || (nearbyOpponents >= 1 && Math.random() < 0.02)) {
+        // Passe très fréquente sous pression proche
+        if (veryCloseOpponents >= 1 && this.passCooldown === 0 && Math.random() < 0.5) {
+            return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight);
+        }
+
+        // Passe proactive même sans pression (2% par frame ~= 1 passe par seconde en moyenne)
+        if (this.passCooldown === 0 && Math.random() < 0.03) {
             const passTarget = this.findBestPassTarget(allPlayers, rinkWidth);
-            if (passTarget && this.passCooldown === 0) {
+            if (passTarget) {
                 puck.shoot(passTarget.x, passTarget.y, PASS_POWER);
                 this.hasPuck = false;
+                this.possessionTime = 0;
+                this.contestedFrames = 0;
                 this.passCooldown = PASS_COOLDOWN;
                 return { action: true };
             }
@@ -243,8 +285,25 @@ class Player {
         return {
             action: false,
             targetX: goalX,
-            targetY: goalY + (this.homeY - rinkHeight / 2) * 0.3 // Garder un écart vertical
+            targetY: goalY + (this.homeY - rinkHeight / 2) * 0.3
         };
+    }
+
+    forcePass(puck, allPlayers, rinkWidth, rinkHeight) {
+        const passTarget = this.findBestPassTarget(allPlayers, rinkWidth);
+        if (passTarget) {
+            puck.shoot(passTarget.x, passTarget.y, PASS_POWER);
+        } else {
+            // Dégagement aléatoire vers l'avant
+            const clearX = this.team === 'home' ? rinkWidth - 50 : 50;
+            const clearY = rinkHeight / 2 + (Math.random() - 0.5) * 200;
+            puck.shoot(clearX, clearY, CLEAR_POWER);
+        }
+        this.hasPuck = false;
+        this.possessionTime = 0;
+        this.contestedFrames = 0;
+        this.passCooldown = PASS_COOLDOWN;
+        return { action: true };
     }
 
     updateTeamHasPuck(puck, allPlayers, rinkWidth, rinkHeight) {
@@ -331,11 +390,11 @@ class Player {
     }
 
     findBestPassTarget(allPlayers, rinkWidth) {
+        // Trouver TOUS les coéquipiers (sauf gardien)
         const teammates = allPlayers.filter(p =>
             p.team === this.team &&
             p !== this &&
-            p.role !== 'goalie' &&
-            p.passCooldown === 0
+            p.role !== 'goalie'
         );
 
         if (teammates.length === 0) return null;
@@ -350,9 +409,10 @@ class Player {
                 : mate.x;
 
             const nearbyOpps = mate.countNearbyOpponents(allPlayers, PRESSURE_DISTANCE);
+            const distFromMe = this.distanceTo(mate.x, mate.y);
 
-            // Score : avancé vers le but + démarqué
-            const score = (rinkWidth - distToGoal) - (nearbyOpps * 100);
+            // Score : avancé vers le but + démarqué + pas trop proche
+            const score = (rinkWidth - distToGoal) - (nearbyOpps * 50) + (distFromMe * 0.5);
 
             if (score > bestScore) {
                 bestScore = score;
