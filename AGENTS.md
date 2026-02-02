@@ -1,4 +1,4 @@
-# Spécifications des Agents (IA) - Mini NHL
+# Spécifications Mini NHL
 
 Ce document décrit le comportement fonctionnel attendu pour les agents autonomes (IA) du jeu. Il sert de référence pour l'implémentation des règles de jeu et de l'intelligence artificielle.
 
@@ -49,3 +49,99 @@ L'objectif est de récupérer le palet et d'empêcher les tirs.
 *   **Actions avec le palet** :
     *   **Geler le disque** : Arrêter le jeu pour provoquer une mise au jeu.
     *   **Passe** : Relancer le jeu en faisant une passe, prioritairement à ses défenseurs.
+
+---
+
+## Build / Development
+
+This is a vanilla JavaScript project with no build system. Simply open `index.html` in a browser.
+
+### Development Server
+```bash
+# Python 3
+python -m http.server 8000
+
+# Node.js
+npx serve .
+
+# PHP
+php -S localhost:8000
+```
+
+Then navigate to `http://localhost:8000`
+
+## Code Style Guidelines
+
+### JavaScript
+- **Language**: Vanilla ES6+ JavaScript, no transpilation
+- **Classes**: Use ES6 class syntax with PascalCase (e.g., `Player`, `Game`)
+- **Methods**: camelCase for methods and properties
+- **Indentation**: 4 spaces
+- **Comments**: French language for inline comments explaining logic
+- **Variables**: Use `const` and `let`, avoid `var`
+- **String quotes**: Double quotes preferred
+
+### CSS
+- **Indentation**: 4 spaces
+- **Naming**: kebab-case for IDs and classes
+- **Comments**: French language for explanations
+
+### HTML
+- **Language**: French (`lang="fr"`)
+- **Indentation**: 4 spaces
+- **Encoding**: UTF-8
+
+### Naming Conventions
+- **Files**: kebab-case (e.g., `script.js`, `style.css`)
+- **Classes**: PascalCase (e.g., `Rink`, `Puck`, `Player`, `Game`)
+- **Methods/Properties**: camelCase (e.g., `checkPossession`, `rinkWidth`)
+- **Constants**: UPPER_SNAKE_CASE for true constants
+
+### Architecture
+- **Classes**: `Rink` (canvas/rendering), `Puck` (physics), `Player` (AI/behavior), `Game` (orchestration)
+- **Game Loop**: Uses `requestAnimationFrame` with `animate()` method
+- **Team Values**: `'home'` (red, left side) and `'away'` (blue, right side)
+- **Roles**: `'goalie'`, `'defenseman'`, `'forward'`
+
+### Error Handling
+- Validate canvas context availability
+- Check for null/undefined before DOM manipulation
+- Guard against division by zero in collision detection
+
+### Performance
+- Minimize object creation in the game loop
+- Use `const` for values that don't change
+- Clear canvas with `clearRect` before each frame
+
+### Class Structure
+- **Constructor**: Initialize all properties (x, y, radius, speed, etc.)
+- **Update**: Handle physics/movement/positioning logic
+- **Draw**: Render to canvas context (receives ctx as parameter)
+- Game entities follow pattern: `Rink` → `Puck` → `Player` → `Game`
+
+### Physics/Math Guidelines
+- **Coordinates**: x/y for position, vx/vy for velocity
+- **Distances**: Use `Math.hypot(dx, dy)` or `Math.sqrt(dx*dx + dy*dy)`
+- **Angles**: Use `Math.atan2(dy, dx)` for direction calculation
+- **Collision**: Check `distance < radius1 + radius2` for overlaps
+- **Friction**: Apply as multiplier (e.g., `this.vx *= 0.99`)
+- **Bounds**: Clamp position with `Math.max(min, Math.min(max, value))`
+
+### DOM & Events
+- Use `window.onload` for initialization
+- Event listeners on DOM elements via `getElementById`
+- Create UI elements dynamically with `document.createElement`
+- Use `insertBefore` for positioning UI elements
+
+### Color Constants
+- Home team: `#cc0000` (red)
+- Away team: `#0033cc` (blue)
+- Puck: `black`
+- Center line: `#cc0000` (red, lineWidth 5)
+- Circle: `#0033cc` (blue)
+- Rink border: `#b00` (red)
+
+### Testing & Linting
+- No test framework or linter configured
+- Manual testing via browser (`python -m http.server 8000`)
+- No single test command available
