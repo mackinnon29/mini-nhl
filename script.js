@@ -1,7 +1,9 @@
 // ==================== CONSTANTES DE JEU ====================
 const PUCK_CONTROL_DISTANCE = 25;  // Distance pour contrôler le palet
-const SHOT_POWER = 12;             // Puissance des tirs
+const SHOT_CONTROL_DISTANCE = 12;  // Distance réduite pour intercepter un tir rapide
+const SHOT_POWER = 15;             // Puissance des tirs (augmentée pour traverser)
 const PASS_POWER = 10;             // Puissance des passes
+const SHOT_SPEED_THRESHOLD = 10;   // Vitesse au-dessus de laquelle c'est considéré comme un tir
 const PRESSURE_DISTANCE = 60;      // Distance considérée comme "sous pression"
 const CLOSE_PRESSURE_DISTANCE = 35; // Distance très proche (duel)
 const SHOT_ZONE_RATIO = 0.35;      // Zone de tir (35% depuis le but adverse)
@@ -646,7 +648,11 @@ class Game {
         // Pendant le cooldown, seuls les coéquipiers peuvent récupérer
         if (!this.puck.controlledBy) {
             let closestPlayer = null;
-            let closestDist = PUCK_CONTROL_DISTANCE;
+
+            // Distance de contrôle réduite pour les tirs rapides (sans destinataire de passe)
+            const isShot = puckSpeed > SHOT_SPEED_THRESHOLD && !this.passTarget;
+            const controlDistance = isShot ? SHOT_CONTROL_DISTANCE : PUCK_CONTROL_DISTANCE;
+            let closestDist = controlDistance;
 
             for (const player of this.players) {
                 // Pendant le cooldown d'interception, bloquer les adversaires
@@ -654,8 +660,13 @@ class Game {
                     continue; // Ignorer les adversaires pendant le cooldown
                 }
 
+                // Les gardiens ont une distance de contrôle plus grande pour les tirs
+                const playerControlDist = (player.role === 'goalie' && isShot)
+                    ? PUCK_CONTROL_DISTANCE  // Gardien peut arrêter les tirs normalement
+                    : controlDistance;
+
                 const dist = player.distanceTo(this.puck.x, this.puck.y);
-                if (dist < closestDist) {
+                if (dist < playerControlDist && dist < closestDist) {
                     closestDist = dist;
                     closestPlayer = player;
                 }
