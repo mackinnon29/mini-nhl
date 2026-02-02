@@ -1,5 +1,6 @@
 body {
-    background-color: #222; /* Fond sombre pour faire ressortir la glace */
+    background-color: #222;
+    /* Fond sombre pour faire ressortir la glace */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -15,10 +16,10 @@ body {
 }
 
 canvas {
-    background-color: #fff; /* La glace */
-    border: 5px solid #b00; /* Les bandes */
-    border-radius: 100px; /* Les coins arrondis de la patinoire */
-    box-shadow: 0 0 30px rgba(0,0,0,0.5); /* Une petite ombre pour le style */
+    background-color: #1a1a2e;
+    /* Fond tribunes (bleu foncé) */
+    border-radius: 10px;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
 }
 
 #ui-layer {

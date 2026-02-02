@@ -26,12 +26,88 @@ class Rink {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
-        this.width = this.canvas.width;
-        this.height = this.canvas.height;
+
+        // Marge pour les tribunes
+        this.margin = 50;
+
+        // Dimensions de la patinoire (zone de jeu)
+        this.rinkLeft = this.margin;
+        this.rinkTop = this.margin;
+        this.rinkWidth = this.canvas.width - this.margin * 2;  // 1000
+        this.rinkHeight = this.canvas.height - this.margin * 2; // 500
+
+        // Pour compatibilité avec le reste du code
+        this.width = this.rinkWidth;
+        this.height = this.rinkHeight;
+
+        // Générer les spectateurs une seule fois
+        this.spectators = this.generateSpectators();
+    }
+
+    generateSpectators() {
+        const spectators = [];
+        const spectatorSize = 8;
+        const spacing = 12;
+        const colors = ['#cc0000', '#0033cc'];  // Rouge et bleu uniquement
+
+        // Fonction pseudo-aléatoire avec seed
+        const pseudoRandom = (seed) => {
+            const x = Math.sin(seed * 9999) * 10000;
+            return x - Math.floor(x);
+        };
+
+        let seed = 42;
+
+        // Zone haute (au-dessus de la patinoire)
+        for (let y = 5; y < this.margin - 5; y += spacing) {
+            for (let x = 5; x < this.canvas.width - 5; x += spacing) {
+                const color = colors[Math.floor(pseudoRandom(seed++) * 2)];
+                spectators.push({ x, y, size: spectatorSize, color });
+            }
+        }
+
+        // Zone basse (en-dessous de la patinoire)
+        for (let y = this.canvas.height - this.margin + 5; y < this.canvas.height - 5; y += spacing) {
+            for (let x = 5; x < this.canvas.width - 5; x += spacing) {
+                const color = colors[Math.floor(pseudoRandom(seed++) * 2)];
+                spectators.push({ x, y, size: spectatorSize, color });
+            }
+        }
+
+        // Zone gauche (à gauche de la patinoire)
+        for (let y = this.margin; y < this.canvas.height - this.margin; y += spacing) {
+            for (let x = 5; x < this.margin - 5; x += spacing) {
+                const color = colors[Math.floor(pseudoRandom(seed++) * 2)];
+                spectators.push({ x, y, size: spectatorSize, color });
+            }
+        }
+
+        // Zone droite (à droite de la patinoire)
+        for (let y = this.margin; y < this.canvas.height - this.margin; y += spacing) {
+            for (let x = this.canvas.width - this.margin + 5; x < this.canvas.width - 5; x += spacing) {
+                const color = colors[Math.floor(pseudoRandom(seed++) * 2)];
+                spectators.push({ x, y, size: spectatorSize, color });
+            }
+        }
+
+        return spectators;
     }
 
     draw() {
-        this.ctx.clearRect(0, 0, this.width, this.height);
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Dessiner les spectateurs (dans les tribunes)
+        this.drawSpectators();
+
+        // Dessiner la patinoire (glace blanche avec coins arrondis)
+        this.drawIce();
+
+        // Dessiner les bandes (bordure rouge)
+        this.drawBoards();
+
+        // Sauvegarder le contexte et translater pour dessiner les éléments de la patinoire
+        this.ctx.save();
+        this.ctx.translate(this.margin, this.margin);
 
         // Ligne centrale (Rouge)
         this.ctx.beginPath();
@@ -65,6 +141,62 @@ class Rink {
         this.ctx.lineWidth = 3;
         this.ctx.strokeRect(goalLineOffset - goalDepth, (this.height - goalWidth) / 2, goalDepth, goalWidth);
         this.ctx.strokeRect(this.width - goalLineOffset, (this.height - goalWidth) / 2, goalDepth, goalWidth);
+
+        this.ctx.restore();
+    }
+
+    drawSpectators() {
+        for (const spec of this.spectators) {
+            this.ctx.fillStyle = spec.color;
+            this.ctx.fillRect(spec.x, spec.y, spec.size, spec.size);
+        }
+    }
+
+    drawIce() {
+        const radius = 30; // Coins arrondis
+        const x = this.rinkLeft;
+        const y = this.rinkTop;
+        const w = this.rinkWidth;
+        const h = this.rinkHeight;
+
+        this.ctx.beginPath();
+        this.ctx.moveTo(x + radius, y);
+        this.ctx.lineTo(x + w - radius, y);
+        this.ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+        this.ctx.lineTo(x + w, y + h - radius);
+        this.ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        this.ctx.lineTo(x + radius, y + h);
+        this.ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+        this.ctx.lineTo(x, y + radius);
+        this.ctx.quadraticCurveTo(x, y, x + radius, y);
+        this.ctx.closePath();
+
+        this.ctx.fillStyle = "#ffffff";
+        this.ctx.fill();
+    }
+
+    drawBoards() {
+        const radius = 30;
+        const x = this.rinkLeft;
+        const y = this.rinkTop;
+        const w = this.rinkWidth;
+        const h = this.rinkHeight;
+
+        this.ctx.beginPath();
+        this.ctx.moveTo(x + radius, y);
+        this.ctx.lineTo(x + w - radius, y);
+        this.ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+        this.ctx.lineTo(x + w, y + h - radius);
+        this.ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        this.ctx.lineTo(x + radius, y + h);
+        this.ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+        this.ctx.lineTo(x, y + radius);
+        this.ctx.quadraticCurveTo(x, y, x + radius, y);
+        this.ctx.closePath();
+
+        this.ctx.strokeStyle = "#b00";
+        this.ctx.lineWidth = 5;
+        this.ctx.stroke();
     }
 }
 
@@ -747,8 +879,15 @@ class Game {
 
         this.rink.draw();
         this.drawScore();
-        this.players.forEach(player => player.draw(this.rink.ctx));
-        this.puck.draw(this.rink.ctx);
+
+        // Dessiner les joueurs et le palet avec le décalage des tribunes
+        const ctx = this.rink.ctx;
+        ctx.save();
+        ctx.translate(this.rink.margin, this.rink.margin);
+        this.players.forEach(player => player.draw(ctx));
+        this.puck.draw(ctx);
+        ctx.restore();
+
         requestAnimationFrame(this.animate);
     }
 
