@@ -24,7 +24,25 @@ class Rink {
         this.ctx.strokeStyle = "#0033cc";
         this.ctx.stroke();
         
-        // On pourra ajouter les lignes bleues et les buts ici plus tard
+        // 4. Lignes de but (Rouge)
+        const goalLineOffset = 60;
+        this.ctx.beginPath();
+        this.ctx.moveTo(goalLineOffset, 0);
+        this.ctx.lineTo(goalLineOffset, this.height);
+        this.ctx.moveTo(this.width - goalLineOffset, 0);
+        this.ctx.lineTo(this.width - goalLineOffset, this.height);
+        this.ctx.strokeStyle = "#cc0000";
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+
+        // 5. Cages (Rectangles)
+        const goalWidth = 80; // Largeur de l'ouverture
+        const goalDepth = 20; // Profondeur du filet
+        
+        this.ctx.strokeStyle = "#444";
+        this.ctx.lineWidth = 3;
+        this.ctx.strokeRect(goalLineOffset - goalDepth, (this.height - goalWidth) / 2, goalDepth, goalWidth);
+        this.ctx.strokeRect(this.width - goalLineOffset, (this.height - goalWidth) / 2, goalDepth, goalWidth);
     }
 }
 
