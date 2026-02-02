@@ -1,15 +1,23 @@
 // ==================== CONSTANTES DE JEU ====================
 const PUCK_CONTROL_DISTANCE = 25;  // Distance pour contrôler le palet
 const SHOT_POWER = 12;             // Puissance des tirs
-const PASS_POWER = 10;             // Puissance des passes (augmentée)
+const PASS_POWER = 10;             // Puissance des passes
 const PRESSURE_DISTANCE = 60;      // Distance considérée comme "sous pression"
 const CLOSE_PRESSURE_DISTANCE = 35; // Distance très proche (duel)
 const SHOT_ZONE_RATIO = 0.35;      // Zone de tir (35% depuis le but adverse)
-const PASS_COOLDOWN = 15;          // Frames avant de pouvoir repasser (très court)
+const PASS_COOLDOWN = 8;           // Frames avant de pouvoir repasser
 const SPREAD_DISTANCE = 80;        // Distance minimale entre coéquipiers
-const CONTESTED_THRESHOLD = 40;    // Frames sous pression avant dégagement forcé (réduit)
+const CONTESTED_THRESHOLD = 25;    // Frames sous pression avant dégagement forcé
 const CLEAR_POWER = 10;            // Puissance du dégagement
-const MAX_POSSESSION_TIME = 60;    // Frames max avec le palet avant passe forcée (~1s)
+const MAX_POSSESSION_TIME = 40;    // Frames max avec le palet avant passe forcée
+
+// ==================== CONSTANTES PASSE ====================
+const PUCK_MIN_SPEED_FOR_PASS = 3; // Vitesse min du palet pour être considéré comme "en passe"
+const PASS_PRIORITY_FRAMES = 15;   // Frames pendant lesquelles le receveur a la priorité
+const PASS_RECEIVE_DISTANCE = 40;  // Distance pour recevoir une passe (plus large que contrôle normal)
+const INTERCEPTION_COOLDOWN = 10;  // Frames pendant lesquelles les adversaires ne peuvent pas intercepter
+const RECEIVE_PASS_COOLDOWN = 20;  // Frames avant que le receveur puisse repasser (~0.33s)
+const INTERCEPTION_PASS_COOLDOWN = 25; // Frames avant qu'un intercepteur puisse passer (~0.4s)
 
 class Rink {
     constructor(canvasId) {
@@ -84,8 +92,11 @@ class Puck {
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance > 0) {
-            this.vx = (dx / distance) * power;
-            this.vy = (dy / distance) * power;
+            // Variance légère de la puissance (+/- 15%) pour plus de réalisme
+            const variance = 1 + (Math.random() - 0.5) * 0.3;
+            const actualPower = power * variance;
+            this.vx = (dx / distance) * actualPower;
+            this.vy = (dy / distance) * actualPower;
         }
         this.controlledBy = null;
     }
@@ -250,30 +261,34 @@ class Player {
 
         // PASSE FORCÉE si possession trop longue OU contesté trop longtemps
         if (this.possessionTime >= MAX_POSSESSION_TIME || this.contestedFrames >= CONTESTED_THRESHOLD) {
-            return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight);
+            return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight, game);
         }
 
         // Tirer si en zone de tir et relativement démarqué
-        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.1) {
+        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.15) {
             const shotY = goalY + (Math.random() - 0.5) * 60;
+            this.hasPuck = false;  // IMPORTANT: marquer comme n'ayant plus le palet AVANT le tir
             puck.shoot(goalX, shotY, SHOT_POWER);
-            this.hasPuck = false;
             this.possessionTime = 0;
             this.contestedFrames = 0;
             return { action: true };
         }
 
         // Passe très fréquente sous pression proche
-        if (veryCloseOpponents >= 1 && this.passCooldown === 0 && Math.random() < 0.5) {
-            return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight);
+        if (veryCloseOpponents >= 1 && this.passCooldown === 0 && Math.random() < 0.7) {
+            return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight, game);
         }
 
-        // Passe proactive même sans pression (2% par frame ~= 1 passe par seconde en moyenne)
-        if (this.passCooldown === 0 && Math.random() < 0.03) {
+        // Passe proactive même sans pression (15% par frame = ~1 passe toutes les 6-7 frames)
+        if (this.passCooldown === 0 && Math.random() < 0.15) {
             const passTarget = this.findBestPassTarget(allPlayers, rinkWidth);
             if (passTarget) {
+                this.hasPuck = false;  // IMPORTANT: marquer comme n'ayant plus le palet AVANT la passe
                 puck.shoot(passTarget.x, passTarget.y, PASS_POWER);
-                this.hasPuck = false;
+                // Enregistrer le destinataire pour lui donner la priorité
+                game.passTarget = passTarget;
+                game.passPriorityTimer = PASS_PRIORITY_FRAMES;
+                game.passingTeam = this.team; // Bloquer les interceptions adverses
                 this.possessionTime = 0;
                 this.contestedFrames = 0;
                 this.passCooldown = PASS_COOLDOWN;
@@ -289,17 +304,52 @@ class Player {
         };
     }
 
-    forcePass(puck, allPlayers, rinkWidth, rinkHeight) {
+    forcePass(puck, allPlayers, rinkWidth, rinkHeight, game) {
+        // IMPORTANT: marquer comme n'ayant plus le palet AVANT la passe
+        this.hasPuck = false;
+
         const passTarget = this.findBestPassTarget(allPlayers, rinkWidth);
         if (passTarget) {
+            // Passe vers le coéquipier le mieux placé
             puck.shoot(passTarget.x, passTarget.y, PASS_POWER);
+            // Enregistrer le destinataire pour lui donner la priorité
+            game.passTarget = passTarget;
+            game.passPriorityTimer = PASS_PRIORITY_FRAMES;
+            game.passingTeam = this.team; // Bloquer les interceptions adverses
         } else {
-            // Dégagement aléatoire vers l'avant
-            const clearX = this.team === 'home' ? rinkWidth - 50 : 50;
-            const clearY = rinkHeight / 2 + (Math.random() - 0.5) * 200;
-            puck.shoot(clearX, clearY, CLEAR_POWER);
+            // Dégagement varié
+            const rand = Math.random();
+            const direction = this.team === 'home' ? 1 : -1;
+
+            if (rand < 0.5) {
+                // Dégagement vers l'avant
+                const clearX = this.team === 'home' ? rinkWidth - 50 : 50;
+                const clearY = rinkHeight / 2 + (Math.random() - 0.5) * 200;
+                puck.shoot(clearX, clearY, CLEAR_POWER);
+            } else if (rand < 0.75) {
+                // Dégagement latéral
+                const clearX = this.x + direction * 100;
+                const clearY = this.y + (Math.random() > 0.5 ? 1 : -1) * 150;
+                puck.shoot(clearX, clearY, CLEAR_POWER * 0.9);
+            } else {
+                // Passe en arrière vers le défenseur
+                const defender = allPlayers.find(p =>
+                    p.team === this.team &&
+                    p.role === 'defenseman'
+                );
+                if (defender) {
+                    puck.shoot(defender.x, defender.y, PASS_POWER * 0.8);
+                    game.passTarget = defender;
+                    game.passPriorityTimer = PASS_PRIORITY_FRAMES;
+                    game.passingTeam = this.team; // Bloquer les interceptions adverses
+                } else {
+                    // Sinon dégagement arrière
+                    const clearX = this.x - direction * 100;
+                    const clearY = rinkHeight / 2 + (Math.random() - 0.5) * 100;
+                    puck.shoot(clearX, clearY, CLEAR_POWER * 0.8);
+                }
+            }
         }
-        this.hasPuck = false;
         this.possessionTime = 0;
         this.contestedFrames = 0;
         this.passCooldown = PASS_COOLDOWN;
@@ -307,42 +357,46 @@ class Player {
     }
 
     updateTeamHasPuck(puck, allPlayers, rinkWidth, rinkHeight) {
-        // Se positionner pour offrir une ligne de passe
         const carrier = allPlayers.find(p => p.hasPuck);
         if (!carrier) {
             return { targetX: this.homeX, targetY: this.homeY };
         }
 
-        // Calculer une position décalée pour offrir une passe
         let targetX, targetY;
         const goalX = this.getTargetGoalX(rinkWidth);
 
         if (this.role === 'forward') {
-            // Attaquants : avancer vers le but mais rester écartés
             targetX = this.team === 'home'
-                ? Math.min(carrier.x + 100, rinkWidth - 100)
-                : Math.max(carrier.x - 100, 100);
+                ? Math.min(carrier.x + 120, rinkWidth - 80)
+                : Math.max(carrier.x - 120, 80);
 
-            // Position Y basée sur la position de base pour l'écartement
             targetY = this.homeY;
 
-            // S'écarter des coéquipiers
+            // S'écarter plus agressivement des coéquipiers
             const teammates = allPlayers.filter(p => p.team === this.team && p !== this && p.role !== 'goalie');
             for (const mate of teammates) {
                 const dist = this.distanceTo(mate.x, mate.y);
                 if (dist < SPREAD_DISTANCE && dist > 0) {
-                    targetY += (this.y - mate.y) * 0.3;
+                    targetY += (this.y - mate.y) * 0.5;
                 }
             }
+
+            // Mouvement aléatoire latéral pour se démarquer
+            if (Math.random() < 0.05) {
+                targetY += (Math.random() - 0.5) * 60;
+            }
         } else {
-            // Défenseurs : rester en retrait pour la couverture
             targetX = this.team === 'home'
-                ? Math.min(carrier.x - 50, rinkWidth * 0.5)
-                : Math.max(carrier.x + 50, rinkWidth * 0.5);
+                ? Math.min(carrier.x - 50, rinkWidth * 0.45)
+                : Math.max(carrier.x + 50, rinkWidth * 0.55);
             targetY = this.homeY;
+
+            // Léger mouvement pour garder les options ouvertes
+            if (Math.random() < 0.03) {
+                targetY += (Math.random() - 0.5) * 40;
+            }
         }
 
-        // Contraindre dans les limites
         targetY = Math.max(50, Math.min(rinkHeight - 50, targetY));
 
         return { targetX, targetY };
@@ -390,7 +444,6 @@ class Player {
     }
 
     findBestPassTarget(allPlayers, rinkWidth) {
-        // Trouver TOUS les coéquipiers (sauf gardien)
         const teammates = allPlayers.filter(p =>
             p.team === this.team &&
             p !== this &&
@@ -399,11 +452,11 @@ class Player {
 
         if (teammates.length === 0) return null;
 
-        // Trouver le coéquipier le plus avancé et démarqué
         let bestTarget = null;
         let bestScore = -Infinity;
 
         for (const mate of teammates) {
+            // Distance du coéquipier au but adverse (plus petit = meilleur)
             const distToGoal = this.team === 'home'
                 ? rinkWidth - mate.x
                 : mate.x;
@@ -411,8 +464,17 @@ class Player {
             const nearbyOpps = mate.countNearbyOpponents(allPlayers, PRESSURE_DISTANCE);
             const distFromMe = this.distanceTo(mate.x, mate.y);
 
-            // Score : avancé vers le but + démarqué + pas trop proche
-            const score = (rinkWidth - distToGoal) - (nearbyOpps * 50) + (distFromMe * 0.5);
+            // Score corrigé :
+            // - Favoriser les joueurs PROCHES du but adverse (petit distToGoal = bonus)
+            // - Pénaliser les joueurs marqués
+            // - Favoriser les passes moyennes (ni trop courtes, ni trop longues)
+            // - Pénaliser les passes trop courtes (moins de 60 pixels)
+            const advancementBonus = (rinkWidth - distToGoal) * 1.5; // Plus proche du but = mieux
+            const pressurePenalty = nearbyOpps * 80;
+            const distancePenalty = distFromMe < 60 ? 150 : (distFromMe > 300 ? 50 : 0);
+            const optimalDistBonus = (distFromMe > 80 && distFromMe < 200) ? 30 : 0;
+
+            const score = advancementBonus - pressurePenalty - distancePenalty + optimalDistBonus;
 
             if (score > bestScore) {
                 bestScore = score;
@@ -464,6 +526,11 @@ class Game {
         this.puckCarrier = null;
         this.teamWithPuck = null;
 
+        // Système de passe en cours
+        this.passTarget = null;      // Joueur destinataire de la passe
+        this.passPriorityTimer = 0;  // Timer de priorité pour le receveur
+        this.passingTeam = null;     // Équipe qui a fait la passe (pour bloquer les interceptions)
+
         this.running = false;
 
         document.getElementById('start-btn').addEventListener('click', () => {
@@ -485,25 +552,37 @@ class Game {
 
         // Équipe Domicile (Rouge)
         this.players.push(new Player(100, h / 2, 'home', 39, 'goalie'));
-        this.players.push(new Player(200, h / 2, 'home', 8, 'defenseman'));
-        this.players.push(new Player(350, h / 2 - 80, 'home', 29, 'forward'));
-        this.players.push(new Player(350, h / 2 + 80, 'home', 88, 'forward'));
+        this.players.push(new Player(200, h / 2 - 50, 'home', 8, 'defenseman'));
+        this.players.push(new Player(200, h / 2 + 50, 'home', 7, 'defenseman'));
+        this.players.push(new Player(350, h / 2 - 100, 'home', 29, 'forward'));
+        this.players.push(new Player(350, h / 2, 'home', 62, 'forward'));
+        this.players.push(new Player(350, h / 2 + 100, 'home', 88, 'forward'));
+
 
         // Équipe Extérieur (Bleu)
         this.players.push(new Player(w - 100, h / 2, 'away', 35, 'goalie'));
-        this.players.push(new Player(w - 200, h / 2, 'away', 2, 'defenseman'));
-        this.players.push(new Player(w - 350, h / 2 - 80, 'away', 29, 'forward'));
-        this.players.push(new Player(w - 350, h / 2 + 80, 'away', 97, 'forward'));
+        this.players.push(new Player(w - 200, h / 2 - 50, 'away', 2, 'defenseman'));
+        this.players.push(new Player(w - 200, h / 2 + 50, 'away', 99, 'defenseman'));
+        this.players.push(new Player(w - 350, h / 2 - 100, 'away', 29, 'forward'));
+        this.players.push(new Player(w - 350, h / 2, 'away', 93, 'forward'));
+        this.players.push(new Player(w - 350, h / 2 + 100, 'away', 97, 'forward'));
     }
 
     animate() {
         if (this.running) {
-            this.checkPuckControl();
+            // 1. Mettre à jour le palet (mouvement si libre)
             this.puck.update(this.rink.width, this.rink.height);
+
+            // 2. Mettre à jour les joueurs (décisions, mouvements, passes)
             this.players.forEach(player =>
                 player.update(this.puck, this.players, this.rink.width, this.rink.height, this)
             );
+
+            // 3. Gérer les collisions
             this.checkCollisions();
+
+            // 4. Mettre à jour le contrôle du palet (en dernier pour permettre les passes)
+            this.checkPuckControl();
         }
 
         this.rink.draw();
@@ -513,24 +592,56 @@ class Game {
     }
 
     checkPuckControl() {
-        // Si le palet est déjà contrôlé et le joueur est proche, garder le contrôle
-        if (this.puckCarrier) {
-            const dist = this.puckCarrier.distanceTo(this.puck.x, this.puck.y);
-            if (dist > PUCK_CONTROL_DISTANCE * 1.5 || !this.puckCarrier.hasPuck) {
-                // Perd le contrôle
-                this.puckCarrier.hasPuck = false;
-                this.puckCarrier = null;
-                this.teamWithPuck = null;
-                this.puck.release();
-            }
+        // Décrémenter le timer de priorité de passe
+        if (this.passPriorityTimer > 0) {
+            this.passPriorityTimer--;
+        } else {
+            this.passTarget = null; // Plus de priorité
         }
 
-        // Chercher un nouveau contrôleur
-        if (!this.puckCarrier) {
+        // Si le palet est déjà contrôlé, vérifier si le joueur veut toujours le garder
+        if (this.puckCarrier) {
+            if (!this.puckCarrier.hasPuck) {
+                // Le joueur a volontairement relâché le palet (passe/tir)
+                this.puckCarrier = null;
+                this.teamWithPuck = null;
+            }
+            return; // Palet contrôlé, pas besoin de chercher un nouveau contrôleur
+        }
+
+        // Calculer la vitesse du palet
+        const puckSpeed = Math.sqrt(this.puck.vx * this.puck.vx + this.puck.vy * this.puck.vy);
+
+        // Si le palet bouge vite ET qu'il y a un destinataire de passe
+        if (puckSpeed > PUCK_MIN_SPEED_FOR_PASS && this.passTarget && this.passPriorityTimer > 0) {
+            // Seul le receveur désigné peut capter le palet (avec distance élargie)
+            const dist = this.passTarget.distanceTo(this.puck.x, this.puck.y);
+            if (dist < PASS_RECEIVE_DISTANCE) {
+                this.passTarget.hasPuck = true;
+                this.passTarget.passCooldown = RECEIVE_PASS_COOLDOWN; // Cooldown après réception
+                this.puckCarrier = this.passTarget;
+                this.teamWithPuck = this.passTarget.team;
+                this.puck.attachTo(this.passTarget);
+                this.passTarget = null;
+                this.passPriorityTimer = 0;
+                this.passingTeam = null; // Réinitialiser
+            }
+            // Sinon attendre que le palet arrive
+            return;
+        }
+
+        // Palet libre (lent ou plus de priorité)
+        // Pendant le cooldown, seuls les coéquipiers peuvent récupérer
+        if (!this.puck.controlledBy) {
             let closestPlayer = null;
             let closestDist = PUCK_CONTROL_DISTANCE;
 
             for (const player of this.players) {
+                // Pendant le cooldown d'interception, bloquer les adversaires
+                if (this.passingTeam && this.passPriorityTimer > 0 && player.team !== this.passingTeam) {
+                    continue; // Ignorer les adversaires pendant le cooldown
+                }
+
                 const dist = player.distanceTo(this.puck.x, this.puck.y);
                 if (dist < closestDist) {
                     closestDist = dist;
@@ -539,10 +650,20 @@ class Game {
             }
 
             if (closestPlayer) {
+                // Vérifier si c'est une interception (changement d'équipe)
+                const isInterception = this.teamWithPuck && closestPlayer.team !== this.teamWithPuck;
+
                 closestPlayer.hasPuck = true;
+                // Cooldown plus long pour les interceptions
+                if (isInterception) {
+                    closestPlayer.passCooldown = INTERCEPTION_PASS_COOLDOWN;
+                }
                 this.puckCarrier = closestPlayer;
                 this.teamWithPuck = closestPlayer.team;
                 this.puck.attachTo(closestPlayer);
+                this.passTarget = null;
+                this.passPriorityTimer = 0;
+                this.passingTeam = null;
             }
         }
     }
