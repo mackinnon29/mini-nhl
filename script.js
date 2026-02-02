@@ -473,14 +473,40 @@ class Player {
             targetY = result.targetY;
         } else if (game.teamWithPuck === null) {
             // === PALET LIBRE - Chasser le palet ===
-            if (this.role === 'forward') {
-                // Attaquants : chasser le palet
-                targetX = puck.x;
-                targetY = puck.y;
-            } else {
-                // Défenseurs : rester en position mais suivre un peu le palet
-                targetX = this.homeX;
-                targetY = puck.y * 0.3 + this.homeY * 0.7;
+            // Tous les joueurs peuvent chasser le palet
+            targetX = puck.x;
+            targetY = puck.y;
+
+            // Éviter l'effet "mêlée" - s'écarter des coéquipiers qui sont plus proches du palet
+            const myDistToPuck = this.distanceTo(puck.x, puck.y);
+            const teammates = allPlayers.filter(p =>
+                p.team === this.team && p !== this && p.role !== 'goalie'
+            );
+
+            let closerTeammates = 0;
+            for (const mate of teammates) {
+                const mateDistToPuck = mate.distanceTo(puck.x, puck.y);
+                if (mateDistToPuck < myDistToPuck - 20) {
+                    closerTeammates++;
+                }
+                // S'écarter si trop proche d'un coéquipier
+                const distToMate = this.distanceTo(mate.x, mate.y);
+                if (distToMate < SPREAD_DISTANCE && distToMate > 0) {
+                    targetX += (this.x - mate.x) * 0.3;
+                    targetY += (this.y - mate.y) * 0.3;
+                }
+            }
+
+            // Si des coéquipiers sont plus proches, se positionner en soutien plutôt que chasser
+            if (closerTeammates >= 2) {
+                // Rester en soutien arrière
+                const supportOffset = this.team === 'home' ? -80 : 80;
+                targetX = puck.x + supportOffset;
+                targetY = this.homeY;
+            } else if (closerTeammates === 1 && this.role === 'defenseman') {
+                // Défenseur : soutien latéral
+                targetX = puck.x + (this.team === 'home' ? -60 : 60);
+                targetY = puck.y + (this.homeY > rinkHeight / 2 ? 50 : -50);
             }
         } else if (game.teamWithPuck === this.team) {
             // === ÉQUIPE EN POSSESSION (mais pas moi) ===
@@ -660,14 +686,24 @@ class Player {
                 targetY += (Math.random() - 0.5) * 60;
             }
         } else {
+            // Défenseurs : suivre l'attaque mais légèrement en retrait
             targetX = this.team === 'home'
-                ? Math.min(carrier.x - 50, rinkWidth * 0.45)
-                : Math.max(carrier.x + 50, rinkWidth * 0.55);
+                ? Math.min(carrier.x + 50, rinkWidth - 100)
+                : Math.max(carrier.x - 50, 100);
             targetY = this.homeY;
 
-            // Léger mouvement pour garder les options ouvertes
-            if (Math.random() < 0.03) {
-                targetY += (Math.random() - 0.5) * 40;
+            // S'écarter des coéquipiers
+            const teammates = allPlayers.filter(p => p.team === this.team && p !== this && p.role !== 'goalie');
+            for (const mate of teammates) {
+                const dist = this.distanceTo(mate.x, mate.y);
+                if (dist < SPREAD_DISTANCE && dist > 0) {
+                    targetY += (this.y - mate.y) * 0.4;
+                }
+            }
+
+            // Mouvement aléatoire pour se démarquer
+            if (Math.random() < 0.04) {
+                targetY += (Math.random() - 0.5) * 50;
             }
         }
 
@@ -692,17 +728,25 @@ class Player {
                 targetY = this.homeY;
             }
         } else {
-            // Défenseurs : retourner en position défensive
-            targetX = this.homeX;
-            targetY = puck.y * 0.5 + this.homeY * 0.5; // Entre palet et position de base
+            // Défenseurs : peuvent aussi presser ou intercepter
+            if (carrier && Math.random() < 0.5) {
+                // Presser le porteur
+                targetX = carrier.x + (this.team === 'home' ? -40 : 40);
+                targetY = carrier.y;
+            } else {
+                // Couvrir les lignes de passe
+                targetX = puck.x + (this.team === 'home' ? -60 : 60);
+                targetY = this.homeY;
+            }
         }
 
-        // Limiter la zone des défenseurs
-        if (this.role === 'defenseman') {
-            if (this.team === 'home') {
-                targetX = Math.min(targetX, rinkWidth * 0.6);
-            } else {
-                targetX = Math.max(targetX, rinkWidth * 0.4);
+        // Éviter l'effet "mêlée" - s'écarter des coéquipiers
+        const teammates = allPlayers.filter(p => p.team === this.team && p !== this && p.role !== 'goalie');
+        for (const mate of teammates) {
+            const dist = this.distanceTo(mate.x, mate.y);
+            if (dist < SPREAD_DISTANCE && dist > 0) {
+                targetX += (this.x - mate.x) * 0.25;
+                targetY += (this.y - mate.y) * 0.25;
             }
         }
 
@@ -979,17 +1023,20 @@ class Game {
         ctx.font = 'bold 24px Arial';
         ctx.textAlign = 'center';
 
+        // Position X centrée sur le canvas complet (pas la patinoire)
+        const centerX = this.rink.canvas.width / 2;
+
         // Score équipe Home (rouge)
         ctx.fillStyle = '#cc0000';
-        ctx.fillText(this.scoreHome.toString(), this.rink.width / 2 - 40, 35);
+        ctx.fillText(this.scoreHome.toString(), centerX - 40, 35);
 
         // Tiret
         ctx.fillStyle = '#333';
-        ctx.fillText('-', this.rink.width / 2, 35);
+        ctx.fillText('-', centerX, 35);
 
         // Score équipe Away (bleu)
         ctx.fillStyle = '#0033cc';
-        ctx.fillText(this.scoreAway.toString(), this.rink.width / 2 + 40, 35);
+        ctx.fillText(this.scoreAway.toString(), centerX + 40, 35);
     }
 
     checkPuckControl() {
