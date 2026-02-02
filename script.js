@@ -145,6 +145,112 @@ class Puck {
             this.y = boundsHeight - this.radius;
             this.vy *= -1;
         }
+
+        // === COLLISION AVEC LES CAGES ===
+        // Dimensions des cages (doivent correspondre à celles du Rink)
+        const goalLineOffset = 60;
+        const goalWidth = 80;
+        const goalDepth = 20;
+        const goalTop = boundsHeight / 2 - goalWidth / 2;
+        const goalBottom = boundsHeight / 2 + goalWidth / 2;
+
+        // Cage gauche (équipe home défend)
+        // Rectangle : x de (goalLineOffset - goalDepth) à goalLineOffset, y de goalTop à goalBottom
+        const leftGoalLeft = goalLineOffset - goalDepth;   // 40
+        const leftGoalRight = goalLineOffset;               // 60
+
+        // Cage droite (équipe away défend)
+        const rightGoalLeft = boundsWidth - goalLineOffset; // width - 60
+        const rightGoalRight = boundsWidth - goalLineOffset + goalDepth; // width - 40
+
+        // Vérifier collision avec cage gauche
+        this.handleGoalCollision(leftGoalLeft, leftGoalRight, goalTop, goalBottom, 'left');
+
+        // Vérifier collision avec cage droite
+        this.handleGoalCollision(rightGoalLeft, rightGoalRight, goalTop, goalBottom, 'right');
+    }
+
+    handleGoalCollision(goalLeft, goalRight, goalTop, goalBottom, side) {
+        // Le palet peut entrer SEULEMENT par l'ouverture (côté terrain)
+        // - Cage gauche : ouverture à droite (x = goalRight)
+        // - Cage droite : ouverture à gauche (x = goalLeft)
+
+        const r = this.radius;
+
+        // Vérifier si le palet est dans ou proche de la zone de la cage
+        const inGoalX = this.x + r > goalLeft && this.x - r < goalRight;
+        const inGoalY = this.y + r > goalTop && this.y - r < goalBottom;
+
+        if (!inGoalX || !inGoalY) return; // Pas de collision possible
+
+        // Déterminer d'où vient le palet
+        if (side === 'left') {
+            // Cage gauche - ouverture à droite (x = goalRight = 60)
+            // Le palet peut entrer si il vient de la droite (vx < 0) et est proche de l'ouverture
+
+            // Collision avec le fond (côté gauche de la cage, mur du fond)
+            if (this.x - r < goalLeft && this.vx < 0) {
+                this.x = goalLeft + r;
+                this.vx *= -0.5; // Rebond amorti
+            }
+
+            // Collision avec le haut de la cage (barre horizontale haute)
+            if (this.y - r < goalTop && this.y + r > goalTop && this.x > goalLeft && this.x < goalRight) {
+                if (this.vy < 0) {
+                    this.y = goalTop + r;
+                    this.vy *= -0.5;
+                }
+            }
+
+            // Collision avec le bas de la cage (barre horizontale basse)
+            if (this.y + r > goalBottom && this.y - r < goalBottom && this.x > goalLeft && this.x < goalRight) {
+                if (this.vy > 0) {
+                    this.y = goalBottom - r;
+                    this.vy *= -0.5;
+                }
+            }
+
+            // Empêcher l'entrée par-derrière (le palet vient de la gauche, càd derrière la cage)
+            if (this.x + r > goalLeft && this.x < goalLeft + r && this.vx > 0) {
+                // Vérifie si le palet est dans la zone de hauteur de la cage
+                if (this.y > goalTop && this.y < goalBottom) {
+                    this.x = goalLeft - r;
+                    this.vx *= -0.5;
+                }
+            }
+        } else {
+            // Cage droite - ouverture à gauche (x = goalLeft)
+
+            // Collision avec le fond (côté droit de la cage, mur du fond)
+            if (this.x + r > goalRight && this.vx > 0) {
+                this.x = goalRight - r;
+                this.vx *= -0.5;
+            }
+
+            // Collision avec le haut de la cage
+            if (this.y - r < goalTop && this.y + r > goalTop && this.x > goalLeft && this.x < goalRight) {
+                if (this.vy < 0) {
+                    this.y = goalTop + r;
+                    this.vy *= -0.5;
+                }
+            }
+
+            // Collision avec le bas de la cage
+            if (this.y + r > goalBottom && this.y - r < goalBottom && this.x > goalLeft && this.x < goalRight) {
+                if (this.vy > 0) {
+                    this.y = goalBottom - r;
+                    this.vy *= -0.5;
+                }
+            }
+
+            // Empêcher l'entrée par-derrière (le palet vient de la droite)
+            if (this.x - r < goalRight && this.x > goalRight - r && this.vx < 0) {
+                if (this.y > goalTop && this.y < goalBottom) {
+                    this.x = goalRight + r;
+                    this.vx *= -0.5;
+                }
+            }
+        }
     }
 
     draw(ctx) {
