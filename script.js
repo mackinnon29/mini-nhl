@@ -23,7 +23,7 @@ class Rink {
         this.ctx.arc(this.width / 2, this.height / 2, 60, 0, Math.PI * 2);
         this.ctx.strokeStyle = "#0033cc";
         this.ctx.stroke();
-        
+
         // 4. Lignes de but (Rouge)
         const goalLineOffset = 60;
         this.ctx.beginPath();
@@ -38,7 +38,7 @@ class Rink {
         // 5. Cages (Rectangles)
         const goalWidth = 80; // Largeur de l'ouverture
         const goalDepth = 20; // Profondeur du filet
-        
+
         this.ctx.strokeStyle = "#444";
         this.ctx.lineWidth = 3;
         this.ctx.strokeRect(goalLineOffset - goalDepth, (this.height - goalWidth) / 2, goalDepth, goalWidth);
@@ -104,7 +104,7 @@ class Player {
         this.speed = 2.5; // Vitesse de déplacement
     }
 
-    update(puck, rinkWidth) {
+    update(puck, rinkWidth, rinkHeight) {
         let targetX, targetY;
 
         if (this.role === 'forward') {
@@ -122,13 +122,32 @@ class Player {
                 targetX = Math.max(puck.x, rinkWidth * 0.4);
             }
         } else {
-            // Les gardiens suivent le palet mais restent devant leur cage
-            targetY = puck.y;
-            
+            // Les gardiens restent devant leur cage et ne bougent que si le palet est dans leur zone
+            const goalWidth = 80; // Largeur de la cage
+            const goalTop = rinkHeight / 2 - goalWidth / 2;
+            const goalBottom = rinkHeight / 2 + goalWidth / 2;
+            const goalPadding = 20; // Marge supplémentaire au-dessus/en-dessous de la cage
+
             if (this.team === 'home') {
                 targetX = 60; // Position X fixe pour le gardien gauche
+                // Ne bouge que si le palet est dans la zone gauche
+                if (puck.x < rinkWidth / 2) {
+                    // Limite le mouvement Y à la zone de la cage
+                    targetY = Math.max(goalTop - goalPadding, Math.min(puck.y, goalBottom + goalPadding));
+                } else {
+                    // Retourne au centre si le palet n'est pas dans sa zone
+                    targetY = rinkHeight / 2;
+                }
             } else {
                 targetX = rinkWidth - 60; // Position X fixe pour le gardien droit
+                // Ne bouge que si le palet est dans la zone droite
+                if (puck.x > rinkWidth / 2) {
+                    // Limite le mouvement Y à la zone de la cage
+                    targetY = Math.max(goalTop - goalPadding, Math.min(puck.y, goalBottom + goalPadding));
+                } else {
+                    // Retourne au centre si le palet n'est pas dans sa zone
+                    targetY = rinkHeight / 2;
+                }
             }
         }
 
@@ -151,7 +170,7 @@ class Player {
         // Rouge pour domicile, Bleu pour extérieur
         ctx.fillStyle = (this.team === 'home') ? '#cc0000' : '#0033cc';
         ctx.fill();
-        
+
         // Bordure blanche
         ctx.strokeStyle = "white";
         ctx.lineWidth = 2;
@@ -170,7 +189,7 @@ class Game {
     constructor() {
         this.rink = new Rink('ice-rink');
         this.puck = new Puck(this.rink.width / 2, this.rink.height / 2);
-        
+
         // Création des équipes
         this.players = [];
         this.initTeams();
@@ -180,14 +199,14 @@ class Game {
         // Gestion du bouton Lecture
         document.getElementById('start-btn').addEventListener('click', () => {
             this.running = !this.running;
-            
+
             // Petite impulsion au démarrage pour tester si le palet est à l'arrêt
             if (this.running && Math.abs(this.puck.vx) < 0.1) {
                 this.puck.vx = (Math.random() - 0.5) * 20;
                 this.puck.vy = (Math.random() - 0.5) * 20;
             }
         });
-        
+
         // On lance la boucle d'animation
         this.animate = this.animate.bind(this);
         requestAnimationFrame(this.animate);
@@ -213,15 +232,15 @@ class Game {
     animate() {
         if (this.running) {
             this.puck.update(this.rink.width, this.rink.height);
-            this.players.forEach(player => player.update(this.puck, this.rink.width));
+            this.players.forEach(player => player.update(this.puck, this.rink.width, this.rink.height));
             this.checkCollisions();
         }
 
         this.rink.draw();
-        
+
         // Dessiner les joueurs
         this.players.forEach(player => player.draw(this.rink.ctx));
-        
+
         this.puck.draw(this.rink.ctx);
         requestAnimationFrame(this.animate);
     }
