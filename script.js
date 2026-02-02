@@ -196,6 +196,7 @@ class Game {
         if (this.running) {
             this.puck.update(this.rink.width, this.rink.height);
             this.players.forEach(player => player.update(this.puck, this.rink.width));
+            this.checkCollisions();
         }
 
         this.rink.draw();
@@ -205,6 +206,41 @@ class Game {
         
         this.puck.draw(this.rink.ctx);
         requestAnimationFrame(this.animate);
+    }
+
+    checkCollisions() {
+        for (let i = 0; i < this.players.length; i++) {
+            for (let j = i + 1; j < this.players.length; j++) {
+                const p1 = this.players[i];
+                const p2 = this.players[j];
+
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const minDistance = p1.radius + p2.radius;
+
+                if (distance < minDistance) {
+                    const overlap = minDistance - distance;
+                    let nx = 0;
+                    let ny = 0;
+
+                    if (distance === 0) {
+                        nx = 1;
+                    } else {
+                        nx = dx / distance;
+                        ny = dy / distance;
+                    }
+
+                    const moveX = nx * overlap * 0.5;
+                    const moveY = ny * overlap * 0.5;
+
+                    p1.x -= moveX;
+                    p1.y -= moveY;
+                    p2.x += moveX;
+                    p2.y += moveY;
+                }
+            }
+        }
     }
 }
 
