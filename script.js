@@ -264,8 +264,8 @@ class Player {
             return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight, game);
         }
 
-        // Tirer si en zone de tir et relativement démarqué
-        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.15) {
+        // Tirer si en zone de tir - probabilité augmentée pour plus de tirs
+        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.40) {
             const shotY = goalY + (Math.random() - 0.5) * 60;
             this.hasPuck = false;  // IMPORTANT: marquer comme n'ayant plus le palet AVANT le tir
             puck.shoot(goalX, shotY, SHOT_POWER);
@@ -274,13 +274,25 @@ class Player {
             return { action: true };
         }
 
-        // Passe très fréquente sous pression proche
-        if (veryCloseOpponents >= 1 && this.passCooldown === 0 && Math.random() < 0.7) {
+        // Tir moins fréquent même avec 2 adversaires proches en zone offensive
+        if (inShotZone && nearbyOpponents <= 2 && Math.random() < 0.15) {
+            const shotY = goalY + (Math.random() - 0.5) * 80;
+            this.hasPuck = false;
+            puck.shoot(goalX, shotY, SHOT_POWER * 0.9);  // Tir légèrement moins puissant car sous pression
+            this.possessionTime = 0;
+            this.contestedFrames = 0;
+            return { action: true };
+        }
+
+        // Passe sous pression proche - réduit en zone offensive car on préfère tirer
+        const passProbUnderPressure = inShotZone ? 0.45 : 0.70;
+        if (veryCloseOpponents >= 1 && this.passCooldown === 0 && Math.random() < passProbUnderPressure) {
             return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight, game);
         }
 
-        // Passe proactive même sans pression (15% par frame = ~1 passe toutes les 6-7 frames)
-        if (this.passCooldown === 0 && Math.random() < 0.15) {
+        // Passe proactive - réduite en zone offensive pour favoriser les tirs
+        const proactivePassProb = inShotZone ? 0.08 : 0.15;
+        if (this.passCooldown === 0 && Math.random() < proactivePassProb) {
             const passTarget = this.findBestPassTarget(allPlayers, rinkWidth);
             if (passTarget) {
                 this.hasPuck = false;  // IMPORTANT: marquer comme n'ayant plus le palet AVANT la passe
