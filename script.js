@@ -1020,11 +1020,27 @@ class Game {
 
     drawScore() {
         const ctx = this.rink.ctx;
-        ctx.font = 'bold 24px Arial';
-        ctx.textAlign = 'center';
 
         // Position X centrée sur le canvas complet (pas la patinoire)
         const centerX = this.rink.canvas.width / 2;
+
+        // Rectangle blanc de fond pour la lisibilité
+        const bgWidth = 120;
+        const bgHeight = 36;
+        const bgX = centerX - bgWidth / 2;
+        const bgY = 8;
+        const borderRadius = 8;
+
+        ctx.beginPath();
+        ctx.roundRect(bgX, bgY, bgWidth, bgHeight, borderRadius);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fill();
+        ctx.strokeStyle = '#ccc';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
 
         // Score équipe Home (rouge)
         ctx.fillStyle = '#cc0000';
