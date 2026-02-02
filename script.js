@@ -1,16 +1,24 @@
+// ==================== CONSTANTES DE JEU ====================
+const PUCK_CONTROL_DISTANCE = 25;  // Distance pour contrôler le palet
+const SHOT_POWER = 12;             // Puissance des tirs
+const PASS_POWER = 8;              // Puissance des passes
+const PRESSURE_DISTANCE = 60;      // Distance considérée comme "sous pression"
+const SHOT_ZONE_RATIO = 0.35;      // Zone de tir (35% depuis le but adverse)
+const PASS_COOLDOWN = 30;          // Frames avant de pouvoir repasser
+const SPREAD_DISTANCE = 80;        // Distance minimale entre coéquipiers
+
 class Rink {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
-        this.ctx = this.canvas.getContext('2d'); // C'est notre pinceau
+        this.ctx = this.canvas.getContext('2d');
         this.width = this.canvas.width;
         this.height = this.canvas.height;
     }
 
     draw() {
-        // 1. On efface tout pour redessiner proprement
         this.ctx.clearRect(0, 0, this.width, this.height);
 
-        // 2. Ligne centrale (Rouge)
+        // Ligne centrale (Rouge)
         this.ctx.beginPath();
         this.ctx.moveTo(this.width / 2, 0);
         this.ctx.lineTo(this.width / 2, this.height);
@@ -18,13 +26,13 @@ class Rink {
         this.ctx.lineWidth = 5;
         this.ctx.stroke();
 
-        // 3. Cercle central (Bleu)
+        // Cercle central (Bleu)
         this.ctx.beginPath();
         this.ctx.arc(this.width / 2, this.height / 2, 60, 0, Math.PI * 2);
         this.ctx.strokeStyle = "#0033cc";
         this.ctx.stroke();
 
-        // 4. Lignes de but (Rouge)
+        // Lignes de but (Rouge)
         const goalLineOffset = 60;
         this.ctx.beginPath();
         this.ctx.moveTo(goalLineOffset, 0);
@@ -35,10 +43,9 @@ class Rink {
         this.ctx.lineWidth = 2;
         this.ctx.stroke();
 
-        // 5. Cages (Rectangles)
-        const goalWidth = 80; // Largeur de l'ouverture
-        const goalDepth = 20; // Profondeur du filet
-
+        // Cages (Rectangles)
+        const goalWidth = 80;
+        const goalDepth = 20;
         this.ctx.strokeStyle = "#444";
         this.ctx.lineWidth = 3;
         this.ctx.strokeRect(goalLineOffset - goalDepth, (this.height - goalWidth) / 2, goalDepth, goalWidth);
@@ -51,34 +58,71 @@ class Puck {
         this.x = x;
         this.y = y;
         this.radius = 8;
-        this.vx = 0; // Vitesse horizontale
-        this.vy = 0; // Vitesse verticale
-        this.friction = 0.99; // Frottement : on garde 99% de la vitesse à chaque image
+        this.vx = 0;
+        this.vy = 0;
+        this.friction = 0.99;
+        this.controlledBy = null; // Joueur qui contrôle le palet
+    }
+
+    attachTo(player) {
+        this.controlledBy = player;
+        this.vx = 0;
+        this.vy = 0;
+    }
+
+    release() {
+        this.controlledBy = null;
+    }
+
+    shoot(targetX, targetY, power) {
+        const dx = targetX - this.x;
+        const dy = targetY - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance > 0) {
+            this.vx = (dx / distance) * power;
+            this.vy = (dy / distance) * power;
+        }
+        this.controlledBy = null;
     }
 
     update(boundsWidth, boundsHeight) {
-        // 1. Mouvement
+        // Si contrôlé par un joueur, suivre le joueur
+        if (this.controlledBy) {
+            const player = this.controlledBy;
+            // Position du palet devant le joueur (direction du but adverse)
+            const offsetX = player.team === 'home' ? 18 : -18;
+            this.x = player.x + offsetX;
+            this.y = player.y;
+            return;
+        }
+
+        // Mouvement libre
         this.x += this.vx;
         this.y += this.vy;
 
-        // 2. Frottement (ça ralentit tout seul)
+        // Frottement
         this.vx *= this.friction;
         this.vy *= this.friction;
 
-        // 3. Rebond sur les bandes
-        // Gauche ou Droite
+        // Arrêt si très lent
+        if (Math.abs(this.vx) < 0.1 && Math.abs(this.vy) < 0.1) {
+            this.vx = 0;
+            this.vy = 0;
+        }
+
+        // Rebond sur les bandes
         if (this.x - this.radius < 0) {
             this.x = this.radius;
-            this.vx *= -1; // On inverse la vitesse horizontale
+            this.vx *= -1;
         } else if (this.x + this.radius > boundsWidth) {
             this.x = boundsWidth - this.radius;
             this.vx *= -1;
         }
 
-        // Haut ou Bas
         if (this.y - this.radius < 0) {
             this.y = this.radius;
-            this.vy *= -1; // On inverse la vitesse verticale
+            this.vy *= -1;
         } else if (this.y + this.radius > boundsHeight) {
             this.y = boundsHeight - this.radius;
             this.vy *= -1;
@@ -97,66 +141,233 @@ class Player {
     constructor(x, y, team, number, role) {
         this.x = x;
         this.y = y;
-        this.team = team; // 'home' ou 'away'
+        this.homeX = x; // Position de base
+        this.homeY = y;
+        this.team = team;
         this.number = number;
-        this.role = role; // 'goalie' ou 'forward'
-        this.radius = 15; // Un peu plus gros que le palet
-        this.speed = 2.5; // Vitesse de déplacement
+        this.role = role;
+        this.radius = 15;
+        this.speed = 2.5;
+        this.hasPuck = false;
+        this.passCooldown = 0; // Empêche les passes trop rapides
     }
 
-    update(puck, rinkWidth, rinkHeight) {
+    // Distance vers un point
+    distanceTo(x, y) {
+        const dx = x - this.x;
+        const dy = y - this.y;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // Direction du but adverse
+    getTargetGoalX(rinkWidth) {
+        return this.team === 'home' ? rinkWidth - 60 : 60;
+    }
+
+    update(puck, allPlayers, rinkWidth, rinkHeight, game) {
+        if (this.passCooldown > 0) this.passCooldown--;
+
         let targetX, targetY;
 
-        if (this.role === 'forward') {
-            // Les attaquants chassent le palet
-            targetX = puck.x;
-            targetY = puck.y;
-        } else if (this.role === 'defenseman') {
-            // Les défenseurs protègent la zone mais peuvent monter un peu (support offensif)
-            targetY = puck.y;
-            if (this.team === 'home') {
-                // Domicile : suit le palet mais ne dépasse pas ~60% du terrain (reste en couverture)
-                targetX = Math.min(puck.x, rinkWidth * 0.6);
-            } else {
-                // Extérieur : suit le palet mais ne dépasse pas ~40% du terrain (depuis la droite)
-                targetX = Math.max(puck.x, rinkWidth * 0.4);
-            }
-        } else {
-            // Les gardiens restent devant leur cage et ne bougent que si le palet est dans leur zone
-            const goalWidth = 80; // Largeur de la cage
+        if (this.role === 'goalie') {
+            // Comportement gardien (inchangé)
+            targetX = this.team === 'home' ? 60 : rinkWidth - 60;
+            const goalWidth = 80;
             const goalTop = rinkHeight / 2 - goalWidth / 2;
             const goalBottom = rinkHeight / 2 + goalWidth / 2;
-            const goalPadding = 20; // Marge supplémentaire au-dessus/en-dessous de la cage
+            const goalPadding = 20;
 
-            if (this.team === 'home') {
-                targetX = 60; // Position X fixe pour le gardien gauche
-                // Ne bouge que si le palet est dans la zone gauche
-                if (puck.x < rinkWidth / 2) {
-                    // Limite le mouvement Y à la zone de la cage
-                    targetY = Math.max(goalTop - goalPadding, Math.min(puck.y, goalBottom + goalPadding));
-                } else {
-                    // Retourne au centre si le palet n'est pas dans sa zone
-                    targetY = rinkHeight / 2;
-                }
+            const puckInMyZone = this.team === 'home'
+                ? puck.x < rinkWidth / 2
+                : puck.x > rinkWidth / 2;
+
+            if (puckInMyZone) {
+                targetY = Math.max(goalTop - goalPadding, Math.min(puck.y, goalBottom + goalPadding));
             } else {
-                targetX = rinkWidth - 60; // Position X fixe pour le gardien droit
-                // Ne bouge que si le palet est dans la zone droite
-                if (puck.x > rinkWidth / 2) {
-                    // Limite le mouvement Y à la zone de la cage
-                    targetY = Math.max(goalTop - goalPadding, Math.min(puck.y, goalBottom + goalPadding));
-                } else {
-                    // Retourne au centre si le palet n'est pas dans sa zone
-                    targetY = rinkHeight / 2;
-                }
+                targetY = rinkHeight / 2;
+            }
+        } else if (this.hasPuck) {
+            // === COMPORTEMENT AVEC LE PALET ===
+            const result = this.updateWithPuck(puck, allPlayers, rinkWidth, rinkHeight, game);
+            if (result.action) return; // Action effectuée (tir/passe)
+            targetX = result.targetX;
+            targetY = result.targetY;
+        } else if (game.teamWithPuck === this.team) {
+            // === ÉQUIPE EN POSSESSION (mais pas moi) ===
+            const result = this.updateTeamHasPuck(puck, allPlayers, rinkWidth, rinkHeight);
+            targetX = result.targetX;
+            targetY = result.targetY;
+        } else {
+            // === ÉQUIPE ADVERSE EN POSSESSION ===
+            const result = this.updateDefending(puck, allPlayers, rinkWidth, rinkHeight, game);
+            targetX = result.targetX;
+            targetY = result.targetY;
+        }
+
+        // Déplacement vers la cible
+        this.moveTowards(targetX, targetY);
+    }
+
+    updateWithPuck(puck, allPlayers, rinkWidth, rinkHeight, game) {
+        const goalX = this.getTargetGoalX(rinkWidth);
+        const goalY = rinkHeight / 2;
+
+        // Zone de tir ?
+        const inShotZone = this.team === 'home'
+            ? this.x > rinkWidth * (1 - SHOT_ZONE_RATIO)
+            : this.x < rinkWidth * SHOT_ZONE_RATIO;
+
+        // Compter les adversaires proches
+        const nearbyOpponents = this.countNearbyOpponents(allPlayers, PRESSURE_DISTANCE);
+
+        // Tirer si en zone de tir et relativement démarqué
+        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.05) {
+            const shotY = goalY + (Math.random() - 0.5) * 60;
+            puck.shoot(goalX, shotY, SHOT_POWER);
+            this.hasPuck = false;
+            return { action: true };
+        }
+
+        // Sous pression ? Chercher une passe
+        if (nearbyOpponents >= 2 || (nearbyOpponents >= 1 && Math.random() < 0.02)) {
+            const passTarget = this.findBestPassTarget(allPlayers, rinkWidth);
+            if (passTarget && this.passCooldown === 0) {
+                puck.shoot(passTarget.x, passTarget.y, PASS_POWER);
+                this.hasPuck = false;
+                this.passCooldown = PASS_COOLDOWN;
+                return { action: true };
             }
         }
 
-        // Calcul de la distance et de la direction vers la cible
+        // Sinon avancer vers le but
+        return {
+            action: false,
+            targetX: goalX,
+            targetY: goalY + (this.homeY - rinkHeight / 2) * 0.3 // Garder un écart vertical
+        };
+    }
+
+    updateTeamHasPuck(puck, allPlayers, rinkWidth, rinkHeight) {
+        // Se positionner pour offrir une ligne de passe
+        const carrier = allPlayers.find(p => p.hasPuck);
+        if (!carrier) {
+            return { targetX: this.homeX, targetY: this.homeY };
+        }
+
+        // Calculer une position décalée pour offrir une passe
+        let targetX, targetY;
+        const goalX = this.getTargetGoalX(rinkWidth);
+
+        if (this.role === 'forward') {
+            // Attaquants : avancer vers le but mais rester écartés
+            targetX = this.team === 'home'
+                ? Math.min(carrier.x + 100, rinkWidth - 100)
+                : Math.max(carrier.x - 100, 100);
+
+            // Position Y basée sur la position de base pour l'écartement
+            targetY = this.homeY;
+
+            // S'écarter des coéquipiers
+            const teammates = allPlayers.filter(p => p.team === this.team && p !== this && p.role !== 'goalie');
+            for (const mate of teammates) {
+                const dist = this.distanceTo(mate.x, mate.y);
+                if (dist < SPREAD_DISTANCE && dist > 0) {
+                    targetY += (this.y - mate.y) * 0.3;
+                }
+            }
+        } else {
+            // Défenseurs : rester en retrait pour la couverture
+            targetX = this.team === 'home'
+                ? Math.min(carrier.x - 50, rinkWidth * 0.5)
+                : Math.max(carrier.x + 50, rinkWidth * 0.5);
+            targetY = this.homeY;
+        }
+
+        // Contraindre dans les limites
+        targetY = Math.max(50, Math.min(rinkHeight - 50, targetY));
+
+        return { targetX, targetY };
+    }
+
+    updateDefending(puck, allPlayers, rinkWidth, rinkHeight, game) {
+        const carrier = game.puckCarrier;
+        let targetX, targetY;
+
+        if (this.role === 'forward') {
+            // Attaquants : presser le porteur ou bloquer les passes
+            if (carrier && Math.random() < 0.7) {
+                // Presser le porteur
+                targetX = carrier.x;
+                targetY = carrier.y;
+            } else {
+                // Bloquer une ligne de passe
+                targetX = puck.x + (this.team === 'home' ? -30 : 30);
+                targetY = this.homeY;
+            }
+        } else {
+            // Défenseurs : retourner en position défensive
+            targetX = this.homeX;
+            targetY = puck.y * 0.5 + this.homeY * 0.5; // Entre palet et position de base
+        }
+
+        // Limiter la zone des défenseurs
+        if (this.role === 'defenseman') {
+            if (this.team === 'home') {
+                targetX = Math.min(targetX, rinkWidth * 0.6);
+            } else {
+                targetX = Math.max(targetX, rinkWidth * 0.4);
+            }
+        }
+
+        return { targetX, targetY };
+    }
+
+    countNearbyOpponents(allPlayers, distance) {
+        return allPlayers.filter(p =>
+            p.team !== this.team &&
+            p.role !== 'goalie' &&
+            this.distanceTo(p.x, p.y) < distance
+        ).length;
+    }
+
+    findBestPassTarget(allPlayers, rinkWidth) {
+        const teammates = allPlayers.filter(p =>
+            p.team === this.team &&
+            p !== this &&
+            p.role !== 'goalie' &&
+            p.passCooldown === 0
+        );
+
+        if (teammates.length === 0) return null;
+
+        // Trouver le coéquipier le plus avancé et démarqué
+        let bestTarget = null;
+        let bestScore = -Infinity;
+
+        for (const mate of teammates) {
+            const distToGoal = this.team === 'home'
+                ? rinkWidth - mate.x
+                : mate.x;
+
+            const nearbyOpps = mate.countNearbyOpponents(allPlayers, PRESSURE_DISTANCE);
+
+            // Score : avancé vers le but + démarqué
+            const score = (rinkWidth - distToGoal) - (nearbyOpps * 100);
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestTarget = mate;
+            }
+        }
+
+        return bestTarget;
+    }
+
+    moveTowards(targetX, targetY) {
         const dx = targetX - this.x;
         const dy = targetY - this.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Si on est loin de la cible, on avance vers elle
         if (distance > this.speed) {
             this.x += (dx / distance) * this.speed;
             this.y += (dy / distance) * this.speed;
@@ -164,19 +375,16 @@ class Player {
     }
 
     draw(ctx) {
-        // Cercle du joueur
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        // Rouge pour domicile, Bleu pour extérieur
         ctx.fillStyle = (this.team === 'home') ? '#cc0000' : '#0033cc';
         ctx.fill();
 
-        // Bordure blanche
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
+        // Bordure (dorée si a le palet)
+        ctx.strokeStyle = this.hasPuck ? "#ffd700" : "white";
+        ctx.lineWidth = this.hasPuck ? 3 : 2;
         ctx.stroke();
 
-        // Numéro du joueur
         ctx.fillStyle = "white";
         ctx.font = "bold 12px Arial";
         ctx.textAlign = "center";
@@ -190,24 +398,23 @@ class Game {
         this.rink = new Rink('ice-rink');
         this.puck = new Puck(this.rink.width / 2, this.rink.height / 2);
 
-        // Création des équipes
         this.players = [];
         this.initTeams();
 
+        this.puckCarrier = null;
+        this.teamWithPuck = null;
+
         this.running = false;
 
-        // Gestion du bouton Lecture
         document.getElementById('start-btn').addEventListener('click', () => {
             this.running = !this.running;
 
-            // Petite impulsion au démarrage pour tester si le palet est à l'arrêt
-            if (this.running && Math.abs(this.puck.vx) < 0.1) {
-                this.puck.vx = (Math.random() - 0.5) * 20;
-                this.puck.vy = (Math.random() - 0.5) * 20;
+            if (this.running && !this.puckCarrier && Math.abs(this.puck.vx) < 0.1) {
+                this.puck.vx = (Math.random() - 0.5) * 15;
+                this.puck.vy = (Math.random() - 0.5) * 15;
             }
         });
 
-        // On lance la boucle d'animation
         this.animate = this.animate.bind(this);
         requestAnimationFrame(this.animate);
     }
@@ -216,33 +423,68 @@ class Game {
         const w = this.rink.width;
         const h = this.rink.height;
 
-        // Équipe Domicile (Rouge) - À gauche
+        // Équipe Domicile (Rouge)
         this.players.push(new Player(100, h / 2, 'home', 39, 'goalie'));
         this.players.push(new Player(200, h / 2, 'home', 8, 'defenseman'));
-        this.players.push(new Player(300, h / 2 - 100, 'home', 29, 'forward'));
-        this.players.push(new Player(300, h / 2 + 100, 'home', 88, 'forward'));
+        this.players.push(new Player(350, h / 2 - 80, 'home', 29, 'forward'));
+        this.players.push(new Player(350, h / 2 + 80, 'home', 88, 'forward'));
 
-        // Équipe Extérieur (Bleu) - À droite
+        // Équipe Extérieur (Bleu)
         this.players.push(new Player(w - 100, h / 2, 'away', 35, 'goalie'));
         this.players.push(new Player(w - 200, h / 2, 'away', 2, 'defenseman'));
-        this.players.push(new Player(w - 300, h / 2 - 100, 'away', 29, 'forward'));
-        this.players.push(new Player(w - 300, h / 2 + 100, 'away', 97, 'forward'));
+        this.players.push(new Player(w - 350, h / 2 - 80, 'away', 29, 'forward'));
+        this.players.push(new Player(w - 350, h / 2 + 80, 'away', 97, 'forward'));
     }
 
     animate() {
         if (this.running) {
+            this.checkPuckControl();
             this.puck.update(this.rink.width, this.rink.height);
-            this.players.forEach(player => player.update(this.puck, this.rink.width, this.rink.height));
+            this.players.forEach(player =>
+                player.update(this.puck, this.players, this.rink.width, this.rink.height, this)
+            );
             this.checkCollisions();
         }
 
         this.rink.draw();
-
-        // Dessiner les joueurs
         this.players.forEach(player => player.draw(this.rink.ctx));
-
         this.puck.draw(this.rink.ctx);
         requestAnimationFrame(this.animate);
+    }
+
+    checkPuckControl() {
+        // Si le palet est déjà contrôlé et le joueur est proche, garder le contrôle
+        if (this.puckCarrier) {
+            const dist = this.puckCarrier.distanceTo(this.puck.x, this.puck.y);
+            if (dist > PUCK_CONTROL_DISTANCE * 1.5 || !this.puckCarrier.hasPuck) {
+                // Perd le contrôle
+                this.puckCarrier.hasPuck = false;
+                this.puckCarrier = null;
+                this.teamWithPuck = null;
+                this.puck.release();
+            }
+        }
+
+        // Chercher un nouveau contrôleur
+        if (!this.puckCarrier) {
+            let closestPlayer = null;
+            let closestDist = PUCK_CONTROL_DISTANCE;
+
+            for (const player of this.players) {
+                const dist = player.distanceTo(this.puck.x, this.puck.y);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestPlayer = player;
+                }
+            }
+
+            if (closestPlayer) {
+                closestPlayer.hasPuck = true;
+                this.puckCarrier = closestPlayer;
+                this.teamWithPuck = closestPlayer.team;
+                this.puck.attachTo(closestPlayer);
+            }
+        }
     }
 
     checkCollisions() {
@@ -258,8 +500,7 @@ class Game {
 
                 if (distance < minDistance) {
                     const overlap = minDistance - distance;
-                    let nx = 0;
-                    let ny = 0;
+                    let nx = 0, ny = 0;
 
                     if (distance === 0) {
                         nx = 1;
@@ -275,13 +516,32 @@ class Game {
                     p1.y -= moveY;
                     p2.x += moveX;
                     p2.y += moveY;
+
+                    // Si collision entre équipes adverses et l'un a le palet, possible perte
+                    if (p1.team !== p2.team) {
+                        if (p1.hasPuck && Math.random() < 0.1) {
+                            p1.hasPuck = false;
+                            this.puckCarrier = null;
+                            this.teamWithPuck = null;
+                            this.puck.release();
+                            this.puck.vx = (Math.random() - 0.5) * 5;
+                            this.puck.vy = (Math.random() - 0.5) * 5;
+                        } else if (p2.hasPuck && Math.random() < 0.1) {
+                            p2.hasPuck = false;
+                            this.puckCarrier = null;
+                            this.teamWithPuck = null;
+                            this.puck.release();
+                            this.puck.vx = (Math.random() - 0.5) * 5;
+                            this.puck.vy = (Math.random() - 0.5) * 5;
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-// Démarrage du jeu quand la page est chargée
+// Démarrage du jeu
 window.onload = () => {
     const game = new Game();
 };
