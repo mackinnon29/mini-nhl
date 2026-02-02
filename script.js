@@ -83,6 +83,47 @@ class Player {
         this.number = number;
         this.role = role; // 'goalie' ou 'forward'
         this.radius = 15; // Un peu plus gros que le palet
+        this.speed = 2.5; // Vitesse de déplacement
+    }
+
+    update(puck, rinkWidth) {
+        let targetX, targetY;
+
+        if (this.role === 'forward') {
+            // Les attaquants chassent le palet
+            targetX = puck.x;
+            targetY = puck.y;
+        } else if (this.role === 'defenseman') {
+            // Les défenseurs protègent la zone mais peuvent monter un peu (support offensif)
+            targetY = puck.y;
+            if (this.team === 'home') {
+                // Domicile : suit le palet mais ne dépasse pas ~60% du terrain (reste en couverture)
+                targetX = Math.min(puck.x, rinkWidth * 0.6);
+            } else {
+                // Extérieur : suit le palet mais ne dépasse pas ~40% du terrain (depuis la droite)
+                targetX = Math.max(puck.x, rinkWidth * 0.4);
+            }
+        } else {
+            // Les gardiens suivent le palet mais restent devant leur cage
+            targetY = puck.y;
+            
+            if (this.team === 'home') {
+                targetX = 60; // Position X fixe pour le gardien gauche
+            } else {
+                targetX = rinkWidth - 60; // Position X fixe pour le gardien droit
+            }
+        }
+
+        // Calcul de la distance et de la direction vers la cible
+        const dx = targetX - this.x;
+        const dy = targetY - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Si on est loin de la cible, on avance vers elle
+        if (distance > this.speed) {
+            this.x += (dx / distance) * this.speed;
+            this.y += (dy / distance) * this.speed;
+        }
     }
 
     draw(ctx) {
@@ -139,19 +180,22 @@ class Game {
         const h = this.rink.height;
 
         // Équipe Domicile (Rouge) - À gauche
-        this.players.push(new Player(100, h / 2, 'home', 30, 'goalie'));
-        this.players.push(new Player(300, h / 2 - 100, 'home', 10, 'forward'));
+        this.players.push(new Player(100, h / 2, 'home', 39, 'goalie'));
+        this.players.push(new Player(200, h / 2, 'home', 8, 'defenseman'));
+        this.players.push(new Player(300, h / 2 - 100, 'home', 29, 'forward'));
         this.players.push(new Player(300, h / 2 + 100, 'home', 88, 'forward'));
 
         // Équipe Extérieur (Bleu) - À droite
-        this.players.push(new Player(w - 100, h / 2, 'away', 31, 'goalie'));
-        this.players.push(new Player(w - 300, h / 2 - 100, 'away', 9, 'forward'));
+        this.players.push(new Player(w - 100, h / 2, 'away', 35, 'goalie'));
+        this.players.push(new Player(w - 200, h / 2, 'away', 2, 'defenseman'));
+        this.players.push(new Player(w - 300, h / 2 - 100, 'away', 29, 'forward'));
         this.players.push(new Player(w - 300, h / 2 + 100, 'away', 97, 'forward'));
     }
 
     animate() {
         if (this.running) {
             this.puck.update(this.rink.width, this.rink.height);
+            this.players.forEach(player => player.update(this.puck, this.rink.width));
         }
 
         this.rink.draw();
