@@ -11,6 +11,7 @@ const PASS_COOLDOWN = 8;           // Frames avant de pouvoir repasser
 const SPREAD_DISTANCE = 80;        // Distance minimale entre coéquipiers
 const CONTESTED_THRESHOLD = 25;    // Frames sous pression avant dégagement forcé
 const CLEAR_POWER = 10;            // Puissance du dégagement
+const GOALIE_HOLD_TIMEOUT = 120;   // Frames avant remise au centre si gardien ne bouge pas (~2s)
 const MAX_POSSESSION_TIME = 40;    // Frames max avec le palet avant passe forcée
 
 // ==================== CONSTANTES PASSE ====================
@@ -189,21 +190,42 @@ class Player {
         let targetX, targetY;
 
         if (this.role === 'goalie') {
-            // Comportement gardien (inchangé)
+            // Comportement gardien
             targetX = this.team === 'home' ? 60 : rinkWidth - 60;
             const goalWidth = 80;
             const goalTop = rinkHeight / 2 - goalWidth / 2;
             const goalBottom = rinkHeight / 2 + goalWidth / 2;
             const goalPadding = 20;
 
-            const puckInMyZone = this.team === 'home'
-                ? puck.x < rinkWidth / 2
-                : puck.x > rinkWidth / 2;
-
-            if (puckInMyZone) {
-                targetY = Math.max(goalTop - goalPadding, Math.min(puck.y, goalBottom + goalPadding));
-            } else {
+            // Si le gardien a le palet, il peut faire une passe
+            if (this.hasPuck) {
+                // Chercher un coéquipier pour faire une passe (probabilité de 3% par frame)
+                if (Math.random() < 0.03) {
+                    const passTarget = this.findBestPassTarget(allPlayers, rinkWidth);
+                    if (passTarget) {
+                        this.hasPuck = false;
+                        puck.shoot(passTarget.x, passTarget.y, PASS_POWER);
+                        game.passTarget = passTarget;
+                        game.passPriorityTimer = PASS_PRIORITY_FRAMES;
+                        game.passingTeam = this.team;
+                        game.goalieHoldTimer = 0;
+                        game.goalieWithPuck = null;
+                        this.passCooldown = PASS_COOLDOWN;
+                        return; // Action effectuée
+                    }
+                }
+                // Sinon rester en position (le timer de remise au centre est géré dans Game)
                 targetY = rinkHeight / 2;
+            } else {
+                const puckInMyZone = this.team === 'home'
+                    ? puck.x < rinkWidth / 2
+                    : puck.x > rinkWidth / 2;
+
+                if (puckInMyZone) {
+                    targetY = Math.max(goalTop - goalPadding, Math.min(puck.y, goalBottom + goalPadding));
+                } else {
+                    targetY = rinkHeight / 2;
+                }
             }
         } else if (this.hasPuck) {
             // === COMPORTEMENT AVEC LE PALET ===
@@ -545,6 +567,10 @@ class Game {
         this.passPriorityTimer = 0;  // Timer de priorité pour le receveur
         this.passingTeam = null;     // Équipe qui a fait la passe (pour bloquer les interceptions)
 
+        // Système d'arrêt du gardien
+        this.goalieHoldTimer = 0;    // Timer pour le gardien tenant le palet
+        this.goalieWithPuck = null;  // Gardien qui a le palet
+
         // Système de score
         this.scoreHome = 0;
         this.scoreAway = 0;
@@ -606,7 +632,10 @@ class Game {
             // 4. Mettre à jour le contrôle du palet (en dernier pour permettre les passes)
             this.checkPuckControl();
 
-            // 5. Vérifier si un but est marqué
+            // 5. Gérer le timer du gardien tenant le palet
+            this.checkGoalieHoldTimer();
+
+            // 6. Vérifier si un but est marqué
             this.checkGoal();
         }
 
@@ -800,8 +829,63 @@ class Game {
                 this.passTarget = null;
                 this.passPriorityTimer = 0;
                 this.passingTeam = null;
+
+                // Si c'est un gardien qui attrape le palet, démarrer le timer
+                if (closestPlayer.role === 'goalie') {
+                    this.goalieWithPuck = closestPlayer;
+                    this.goalieHoldTimer = GOALIE_HOLD_TIMEOUT;
+                    console.log(`🧤 Arrêt du gardien ! Passe possible pendant 2 secondes...`);
+                }
             }
         }
+    }
+
+    checkGoalieHoldTimer() {
+        // Si un gardien tient le palet
+        if (this.goalieWithPuck && this.goalieHoldTimer > 0) {
+            this.goalieHoldTimer--;
+
+            // Si le timer atteint 0, remettre au centre
+            if (this.goalieHoldTimer === 0) {
+                console.log(`⏱️ Temps écoulé ! Remise au centre.`);
+                this.resetToCenter();
+            }
+        }
+    }
+
+    resetToCenter() {
+        // Remettre le palet au centre
+        this.puck.x = this.rink.width / 2;
+        this.puck.y = this.rink.height / 2;
+        this.puck.vx = 0;
+        this.puck.vy = 0;
+        this.puck.release();
+
+        // Libérer le porteur du palet
+        if (this.puckCarrier) {
+            this.puckCarrier.hasPuck = false;
+        }
+        this.puckCarrier = null;
+        this.teamWithPuck = null;
+        this.passTarget = null;
+        this.passPriorityTimer = 0;
+        this.passingTeam = null;
+        this.goalieWithPuck = null;
+        this.goalieHoldTimer = 0;
+
+        // Remettre les joueurs à leurs positions de départ
+        this.players.forEach(player => {
+            player.x = player.homeX;
+            player.y = player.homeY;
+            player.hasPuck = false;
+            player.passCooldown = 0;
+            player.possessionTime = 0;
+            player.contestedFrames = 0;
+        });
+
+        // Lancer le palet dans une direction aléatoire pour relancer le jeu
+        this.puck.vx = (Math.random() - 0.5) * 10;
+        this.puck.vy = (Math.random() - 0.5) * 10;
     }
 
     checkCollisions() {
