@@ -1082,7 +1082,6 @@ class Game {
 
         this.rink.draw();
         this.drawGoalLights();  // Dessiner les lumières de but
-        this.drawGoalMessage(); // Dessiner le message de but
         this.drawScore();
 
         // Dessiner les joueurs et le palet avec le décalage des tribunes
@@ -1092,6 +1091,8 @@ class Game {
         this.players.forEach(player => player.draw(ctx));
         this.puck.draw(ctx);
         ctx.restore();
+
+        this.drawGoalMessage(); // Dessiner le message de but
 
         requestAnimationFrame(this.animate);
     }
