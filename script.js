@@ -976,6 +976,10 @@ class Game {
         this.goalLightLeft = 0;   // Timer pour la lumière gauche (cage des bleus)
         this.goalLightRight = 0;  // Timer pour la lumière droite (cage des rouges)
 
+        // Message de but
+        this.goalMessage = null;      // Texte du message ("Équipe rouge marque !" etc.)
+        this.goalMessageTimer = 0;    // Timer pour l'affichage du message
+
         // Système de chronomètre
         this.gameTime = 30;  // 30 secondes
         this.timerInterval = null;
@@ -1050,7 +1054,8 @@ class Game {
     }
 
     animate() {
-        if (this.running) {
+        // Si le jeu tourne ET qu'il n'y a pas de message de but affiché
+        if (this.running && this.goalMessageTimer <= 0) {
             // Décrémenter le cooldown de but
             if (this.goalCooldown > 0) this.goalCooldown--;
 
@@ -1077,6 +1082,7 @@ class Game {
 
         this.rink.draw();
         this.drawGoalLights();  // Dessiner les lumières de but
+        this.drawGoalMessage(); // Dessiner le message de but
         this.drawScore();
 
         // Dessiner les joueurs et le palet avec le décalage des tribunes
@@ -1145,12 +1151,18 @@ class Game {
                     this.goalLightRight = 180;  // 3 secondes de clignotement
                     // Exciter les supporters rouges (équipe home)
                     this.rink.triggerSpectatorExcitement('red');
+                    // Afficher le message
+                    this.goalMessage = "Équipe rouge marque !";
+                    this.goalMessageTimer = 180;
                 } else {
                     this.scoreAway++;
                     // Allumer la lumière de la cage gauche (cage des rouges où away a marqué)
                     this.goalLightLeft = 180;  // 3 secondes de clignotement
                     // Exciter les supporters bleus (équipe away)
                     this.rink.triggerSpectatorExcitement('blue');
+                    // Afficher le message
+                    this.goalMessage = "Équipe bleue marque !";
+                    this.goalMessageTimer = 180;
                 }
                 console.log(`⚽ BUT ! Score: Home ${this.scoreHome} - ${this.scoreAway} Away`);
 
@@ -1293,6 +1305,47 @@ class Game {
         ctx.strokeStyle = '#888';
         ctx.lineWidth = 2;
         ctx.stroke();
+    }
+
+    drawGoalMessage() {
+        if (this.goalMessageTimer <= 0) return;
+
+        // Décrémenter le timer
+        this.goalMessageTimer--;
+
+        const ctx = this.rink.ctx;
+        ctx.save();  // Sauvegarder l'état du contexte
+
+        const centerX = this.rink.canvas.width / 2;
+        const centerY = this.rink.canvas.height / 2;
+
+        // Déterminer la couleur du message selon l'équipe
+        const isRedTeam = this.goalMessage.includes('rouge');
+        const teamColor = isRedTeam ? '#cc0000' : '#0033cc';
+
+        // Fond semi-transparent
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        const bgWidth = 350;
+        const bgHeight = 60;
+        ctx.beginPath();
+        ctx.roundRect(centerX - bgWidth / 2, centerY - bgHeight / 2, bgWidth, bgHeight, 10);
+        ctx.fill();
+
+        // Texte du message avec effet de pulsation
+        const pulse = 1 + 0.05 * Math.sin(this.goalMessageTimer * 0.3);
+        ctx.font = `bold ${Math.floor(32 * pulse)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Ombre du texte
+        ctx.fillStyle = '#000';
+        ctx.fillText(this.goalMessage, centerX + 2, centerY + 2);
+
+        // Texte principal
+        ctx.fillStyle = teamColor;
+        ctx.fillText(this.goalMessage, centerX, centerY);
+
+        ctx.restore();  // Restaurer l'état du contexte
     }
 
     checkPuckControl() {
