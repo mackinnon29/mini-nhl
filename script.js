@@ -27,6 +27,8 @@ const NO_RETREAT_LINE_RATIO = 0.20;         // Ligne de non-recul (20% du terrai
 const WINGER_HIGH_POSITION = 0.2;           // Position haute LW (20% de la patinoire)
 const WINGER_LOW_POSITION = 0.8;            // Position basse RW (80% de la patinoire)
 const DEFENDER_OFFENSIVE_SPREAD = 0.45;     // Étalement défenseurs en attaque
+const DEFENDER_OFFENSIVE_PUSH = 0.40;       // Position X des défenseurs en zone offensive (40% = ligne bleue offensive)
+const DEFENDER_PASS_BONUS = 100;            // Bonus pour passe à un défenseur bien placé pour tirer
 const DEFENDER_DEFENSIVE_SPREAD = 0.35;     // Étalement défenseurs en défense
 const CONTESTED_THRESHOLD = 25;    // Frames sous pression avant dégagement forcé
 const CLEAR_POWER = 10;            // Puissance du dégagement
@@ -817,31 +819,33 @@ class Player {
                 }
             }
         } else {
-            // Défenseurs : Se placer à la ligne rouge pour bloquer et tirer de loin (Slapshots)
-            // STRATÉGIE "TOTAL HOCKEY" : On ne recule plus !
+            // Défenseurs : PARTICIPATION OFFENSIVE ACTIVE
+            // Stratégie "TOTAL HOCKEY" : Les défenseurs montent en zone offensive pour tirer et passer
             const redLine = rinkWidth / 2;
+            const offensiveLine = rinkWidth * DEFENDER_OFFENSIVE_PUSH; // ~40% du terrain
             const carrierInOffensiveZone = this.team === 'home'
                 ? carrier.x > redLine
                 : carrier.x < redLine;
 
+            // Les défenseurs avancent ACTIVEMENT en zone offensive
             if (this.team === 'home') {
                 // ÉQUIPE ROUGE (Attaque vers la droite >)
                 if (carrierInOffensiveZone) {
-                    // Si le palet est en zone offensive, on se colle à la ligne rouge (ou légèrement après)
-                    // On ne recule pas ! On reste en soutien haut.
-                    targetX = redLine + 60; // Juste après la ligne rouge
+                    // En zone offensive : monter jusqu'à la ligne offensive (pas juste la ligne rouge)
+                    // Position = 60% du terrain (entre ligne rouge et ligne bleue adverse)
+                    targetX = rinkWidth - offensiveLine; // ~60% du terrain (milieu zone offensive)
                 } else {
-                    // Transition : suivre le porteur
-                    targetX = Math.max(redLine - 100, carrier.x - 150);
+                    // Transition : avancer avec le porteur mais rester en soutien
+                    targetX = Math.max(redLine - 50, carrier.x - 100);
                 }
             } else {
                 // ÉQUIPE BLEUE (Attaque vers la gauche <)
                 if (carrierInOffensiveZone) {
-                    // Si le palet est en zone offensive, on se colle à la ligne rouge
-                    targetX = redLine - 60; // Juste avant la ligne rouge
+                    // En zone offensive : monter jusqu'à la ligne offensive
+                    targetX = offensiveLine; // ~40% du terrain
                 } else {
                     // Transition
-                    targetX = Math.min(redLine + 100, carrier.x + 150);
+                    targetX = Math.min(redLine + 50, carrier.x + 100);
                 }
             }
 
@@ -1035,7 +1039,26 @@ class Player {
             const distancePenalty = distFromMe < 60 ? 150 : (distFromMe > 300 ? 50 : 0);
             const optimalDistBonus = (distFromMe > 80 && distFromMe < 200) ? 30 : 0;
 
-            const score = advancementBonus - pressurePenalty - distancePenalty + optimalDistBonus;
+            // BONUS DÉFENSEUR EN POSITION DE TIR
+            // Si le défenseur est en zone offensive et libre, c'est une excellente option de passe
+            let defenderSlapshotBonus = 0;
+            if (mate.role === 'defenseman') {
+                const inOffensiveZone = this.team === 'home'
+                    ? mate.x > rinkWidth * 0.5  // Défenseur après la ligne rouge
+                    : mate.x < rinkWidth * 0.5;
+                const inSlapshotZone = this.team === 'home'
+                    ? mate.x > rinkWidth * (1 - SLAPSHOT_ZONE_RATIO)
+                    : mate.x < rinkWidth * SLAPSHOT_ZONE_RATIO;
+
+                if (inOffensiveZone && nearbyOpps === 0) {
+                    defenderSlapshotBonus = DEFENDER_PASS_BONUS; // Défenseur libre en zone = bonne option
+                }
+                if (inSlapshotZone && nearbyOpps === 0) {
+                    defenderSlapshotBonus += 50; // Bonus supplémentaire si en position de slapshot
+                }
+            }
+
+            const score = advancementBonus - pressurePenalty - distancePenalty + optimalDistBonus + defenderSlapshotBonus;
 
             if (score > bestScore) {
                 bestScore = score;
