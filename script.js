@@ -1402,6 +1402,49 @@ class Game {
 
     endGame() {
         this.stopTimer();
+
+        // Vérifier si le score est nul -> prolongation
+        if (this.scoreHome === this.scoreAway) {
+            console.log(`⏱️ Score nul ! Prolongation de 20 secondes...`);
+
+            // Ajouter 20 secondes
+            this.gameTime = 20;
+            this.updateTimerDisplay();
+
+            // Remettre les joueurs au centre
+            this.players.forEach(player => {
+                player.x = player.homeX;
+                player.y = player.homeY;
+                player.hasPuck = false;
+                player.passCooldown = 0;
+                player.possessionTime = 0;
+                player.contestedFrames = 0;
+            });
+
+            // Remettre le palet au centre
+            this.puck.x = this.rink.width / 2;
+            this.puck.y = this.rink.height / 2;
+            this.puck.vx = 0;
+            this.puck.vy = 0;
+            this.puck.release();
+            this.puckCarrier = null;
+            this.teamWithPuck = null;
+            this.passTarget = null;
+            this.passPriorityTimer = 0;
+            this.passingTeam = null;
+
+            // Relancer le jeu automatiquement
+            this.running = true;
+            this.startTimer();
+
+            // Lancer le palet pour reprendre
+            this.puck.vx = (Math.random() - 0.5) * 15;
+            this.puck.vy = (Math.random() - 0.5) * 15;
+
+            return;
+        }
+
+        // Si pas de match nul, terminer le match
         this.running = false;
         this.gameEnded = true;
 
