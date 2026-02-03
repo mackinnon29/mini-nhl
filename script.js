@@ -1251,9 +1251,9 @@ class Game {
 
     drawGoalLights() {
         const ctx = this.rink.ctx;
-        const goalLineOffset = 60;
         const lightRadius = 12;
-        const lightY = this.rink.margin - 20;  // Au-dessus des cages (dans la zone des spectateurs)
+        // Centrer verticalement par rapport à la patinoire pour être au niveau des cages
+        const lightY = this.rink.margin + this.rink.height / 2;
 
         // Décrémenter les timers de lumières
         if (this.goalLightLeft > 0) this.goalLightLeft--;
@@ -1263,8 +1263,10 @@ class Game {
         // Alterne toutes les 10 frames (~6 clignotements par seconde)
         const isBlinkOn = (timer) => Math.floor(timer / 10) % 2 === 0;
 
-        // Lumière au-dessus de la cage gauche (où les rouges défendent)
-        const leftLightX = this.rink.margin + goalLineOffset;
+        // Lumière gauche : dans la zone des spectateurs (hors de la glace)
+        // On la place à -20px du bord gauche de la glace
+        const leftLightX = this.rink.margin - 20;
+
         ctx.beginPath();
         ctx.arc(leftLightX, lightY, lightRadius, 0, Math.PI * 2);
         if (this.goalLightLeft > 0 && isBlinkOn(this.goalLightLeft)) {
@@ -1285,8 +1287,10 @@ class Game {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Lumière au-dessus de la cage droite (où les bleus défendent)
-        const rightLightX = this.rink.margin + this.rink.width - goalLineOffset;
+        // Lumière droite : dans la zone des spectateurs (hors de la glace)
+        // On la place à +20px du bord droit de la glace
+        const rightLightX = this.rink.margin + this.rink.width + 20;
+
         ctx.beginPath();
         ctx.arc(rightLightX, lightY, lightRadius, 0, Math.PI * 2);
         if (this.goalLightRight > 0 && isBlinkOn(this.goalLightRight)) {
