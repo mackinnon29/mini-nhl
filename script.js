@@ -988,7 +988,9 @@ class Game {
         this.gameTime = 30;  // 30 secondes
         this.timerInterval = null;
         this.gameEnded = false;
-        this.isOvertime = false;  // Flag pour la prolongation (mort subite)
+        // Flag pour la prolongation (mort subite)
+        this.isOvertime = false;
+        this.overtimeMessageTimer = 0; // Timer pour le message "Prolongation"
 
         // Étoile du match
         this.starOfTheMatch = null;  // Objet {number, team, role, reason}
@@ -1067,8 +1069,22 @@ class Game {
     }
 
     animate() {
-        // Si le jeu tourne ET qu'il n'y a pas de message de but affiché
-        if (this.running && this.goalMessageTimer <= 0) {
+        // Gérer le délai du message de prolongation
+        if (this.overtimeMessageTimer > 0) {
+            this.overtimeMessageTimer--;
+
+            // Si le message est fini, lancer la prolongation
+            if (this.overtimeMessageTimer === 0) {
+                this.running = true;
+                this.startTimer();
+                // Lancer le palet pour reprendre
+                this.puck.vx = (Math.random() - 0.5) * 15;
+                this.puck.vy = (Math.random() - 0.5) * 15;
+            }
+        }
+
+        // Si le jeu tourne ET qu'il n'y a pas de message de but affiché ET pas de message de prolongation
+        if (this.running && this.goalMessageTimer <= 0 && this.overtimeMessageTimer <= 0) {
             // Décrémenter le cooldown de but
             if (this.goalCooldown > 0) this.goalCooldown--;
 
@@ -1108,6 +1124,7 @@ class Game {
         this.drawGoalMessage(); // Dessiner le message de but
         this.drawScorers();      // Dessiner les numéros des buteurs
         this.drawStarOfTheMatch();  // Dessiner l'étoile du match
+        this.drawOvertimeMessage(); // Dessiner le message de prolongation
 
         requestAnimationFrame(this.animate);
     }
@@ -1499,6 +1516,45 @@ class Game {
         ctx.restore();
     }
 
+    drawOvertimeMessage() {
+        if (this.overtimeMessageTimer <= 0) return;
+
+        const ctx = this.rink.ctx;
+        ctx.save();
+
+        const centerX = this.rink.canvas.width / 2;
+        const centerY = this.rink.canvas.height / 2;
+
+        // Fond semi-transparent
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        const bgWidth = 400;
+        const bgHeight = 80;
+        ctx.beginPath();
+        ctx.roundRect(centerX - bgWidth / 2, centerY - bgHeight / 2, bgWidth, bgHeight, 15);
+        ctx.fill();
+
+        // Texte "PROLONGATION !"
+        const pulse = 1 + 0.08 * Math.sin(this.overtimeMessageTimer * 0.2);
+        ctx.font = `bold ${Math.floor(40 * pulse)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Ombre du texte
+        ctx.fillStyle = '#000';
+        ctx.fillText('PROLONGATION !', centerX + 3, centerY - 10 + 3);
+
+        // Texte principal
+        ctx.fillStyle = '#FFD700'; // Or
+        ctx.fillText('PROLONGATION !', centerX, centerY - 10);
+
+        // Sous-texte "Mort Subite"
+        ctx.font = `bold ${Math.floor(20 * pulse)}px Arial`;
+        ctx.fillStyle = '#FFF';
+        ctx.fillText('Mort Subite', centerX, centerY + 25);
+
+        ctx.restore();
+    }
+
     checkPuckControl() {
         // Décrémenter le timer de priorité de passe
         if (this.passPriorityTimer > 0) {
@@ -1759,13 +1815,9 @@ class Game {
             this.passPriorityTimer = 0;
             this.passingTeam = null;
 
-            // Relancer le jeu automatiquement
-            this.running = true;
-            this.startTimer();
-
-            // Lancer le palet pour reprendre
-            this.puck.vx = (Math.random() - 0.5) * 15;
-            this.puck.vy = (Math.random() - 0.5) * 15;
+            // Mettre le jeu en pause et afficher le message de prolongation
+            this.running = false;
+            this.overtimeMessageTimer = 120; // Afficher le message pendant 2 secondes (120 frames)
 
             return;
         }
