@@ -1441,8 +1441,8 @@ class Game {
         }
         const pulse = 1 + Math.sin(this.starOfTheMatchTimer * 0.1) * 0.05;
 
-        // Dimensions du cadre
-        const boxWidth = 120 * pulse;
+        // Dimensions du cadre (adapté au texte "★ ÉTOILE DU MATCH ★")
+        const boxWidth = 240 * pulse;
         const boxHeight = 80 * pulse;
 
         // Fond doré avec dégradé
@@ -1817,38 +1817,19 @@ class Game {
     }
 
     determineStarOfTheMatch() {
-        // 1. Vérifier si un gardien n'a pas encaissé de but
+        // 1. Vérifier si un gardien n'a pas encaissé de but (50% de chance d'être l'étoile)
         const homeGoalie = this.players.find(p => p.team === 'home' && p.role === 'goalie');
         const awayGoalie = this.players.find(p => p.team === 'away' && p.role === 'goalie');
 
-        // Gardien rouge n'a pas encaissé de but (scoreAway === 0)
+        // Gardien avec blanchissage (s'il y en a un)
+        let shutoutGoalie = null;
         if (this.scoreAway === 0 && homeGoalie) {
-            this.starOfTheMatch = {
-                number: homeGoalie.number,
-                team: 'home',
-                role: 'goalie',
-                reason: 'blanchissage'
-            };
-            this.starOfTheMatchTimer = 300;  // 5 secondes d'affichage
-            console.log(`⭐ Étoile du match : #${homeGoalie.number} (gardien rouge) - Blanchissage !`);
-            return;
-        }
-
-        // Gardien bleu n'a pas encaissé de but (scoreHome === 0)
-        if (this.scoreHome === 0 && awayGoalie) {
-            this.starOfTheMatch = {
-                number: awayGoalie.number,
-                team: 'away',
-                role: 'goalie',
-                reason: 'blanchissage'
-            };
-            this.starOfTheMatchTimer = 300;
-            console.log(`⭐ Étoile du match : #${awayGoalie.number} (gardien bleu) - Blanchissage !`);
-            return;
+            shutoutGoalie = { player: homeGoalie, team: 'home' };
+        } else if (this.scoreHome === 0 && awayGoalie) {
+            shutoutGoalie = { player: awayGoalie, team: 'away' };
         }
 
         // 2. Trouver le meilleur buteur
-        // Compter les buts par joueur
         const goalCounts = {};
 
         this.scorersHome.forEach(num => {
@@ -1869,11 +1850,6 @@ class Game {
             }
         }
 
-        if (maxGoals === 0) {
-            // Pas de buts marqués (0-0 après prolongation ne devrait pas arriver, mais au cas où)
-            return;
-        }
-
         // Trouver tous les joueurs avec le maximum de buts
         const topScorers = [];
         for (const key in goalCounts) {
@@ -1883,7 +1859,37 @@ class Game {
             }
         }
 
-        // En cas d'égalité, tirer au sort
+        // 3. Décision finale
+        // Si un gardien a fait un blanchissage, 50% de chance que ce soit lui
+        if (shutoutGoalie && Math.random() < 0.5) {
+            this.starOfTheMatch = {
+                number: shutoutGoalie.player.number,
+                team: shutoutGoalie.team,
+                role: 'goalie',
+                reason: 'blanchissage'
+            };
+            this.starOfTheMatchTimer = 300;
+            console.log(`⭐ Étoile du match : #${shutoutGoalie.player.number} (gardien ${shutoutGoalie.team === 'home' ? 'rouge' : 'bleu'}) - Blanchissage !`);
+            return;
+        }
+
+        // Sinon, c'est le meilleur buteur
+        if (maxGoals === 0) {
+            // Pas de buts marqués - le gardien gagne par défaut s'il y en a un
+            if (shutoutGoalie) {
+                this.starOfTheMatch = {
+                    number: shutoutGoalie.player.number,
+                    team: shutoutGoalie.team,
+                    role: 'goalie',
+                    reason: 'blanchissage'
+                };
+                this.starOfTheMatchTimer = 300;
+                console.log(`⭐ Étoile du match : #${shutoutGoalie.player.number} (gardien ${shutoutGoalie.team === 'home' ? 'rouge' : 'bleu'}) - Blanchissage !`);
+            }
+            return;
+        }
+
+        // En cas d'égalité entre buteurs, tirer au sort
         const winner = topScorers[Math.floor(Math.random() * topScorers.length)];
 
         this.starOfTheMatch = {
