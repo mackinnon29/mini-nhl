@@ -1154,7 +1154,7 @@ class Game {
             let goalProbability = 0.55;
             if (this.lastShooter) {
                 if (this.lastShooter.number === 29 && this.lastShooter.team === 'home') {
-                    goalProbability = 0.75;
+                    goalProbability = this.isOvertime ? 0.87 : 0.75;
                 } else if (this.lastShooter.number === 88 && this.lastShooter.team === 'home') {
                     goalProbability = 0.60;
                 } else if (this.lastShooter.number === 97 && this.lastShooter.team === 'away') {
