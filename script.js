@@ -7,6 +7,9 @@ const SHOT_SPEED_THRESHOLD = 10;   // Vitesse au-dessus de laquelle c'est consid
 const PRESSURE_DISTANCE = 60;      // Distance considérée comme "sous pression"
 const CLOSE_PRESSURE_DISTANCE = 35; // Distance très proche (duel)
 const SHOT_ZONE_RATIO = 0.35;      // Zone de tir (35% depuis le but adverse)
+const SLAPSHOT_ZONE_RATIO = 0.70;      // Peut tirer jusqu'à 70% du terrain (depuis le but adverse)
+const SLAPSHOT_POWER = 18;             // Plus puissant que le tir normal (15)
+const SLAPSHOT_ACCURACY_VARIANCE = 90; // Dispersion plus grande (en pixels Y)
 const PASS_COOLDOWN = 8;           // Frames avant de pouvoir repasser
 const BASE_SPREAD_DISTANCE = 100;           // Distance de base entre coéquipiers
 const OFFENSIVE_SPREAD_MULTIPLIER = 1.6;    // 160px en zone offensive
@@ -19,6 +22,8 @@ const REPULSION_FORCE_FREE_PUCK = 0.4;      // Force de répulsion palet libre
 const REPULSION_FORCE_ATTACKING = 0.7;      // Force de répulsion en attaque
 const REPULSION_FORCE_DEFENDING = 0.6;      // Force de répulsion défenseurs
 const REPULSION_FORCE_DEFENSE = 0.4;        // Force de répulsion phase défensive
+const DEFENSIVE_ENGAGEMENT_DIST = 150;      // Distance pour déclencher l'attaque (Active Zone Defense)
+const NO_RETREAT_LINE_RATIO = 0.20;         // Ligne de non-recul (20% du terrain depuis le but)
 const WINGER_HIGH_POSITION = 0.2;           // Position haute LW (20% de la patinoire)
 const WINGER_LOW_POSITION = 0.8;            // Position basse RW (80% de la patinoire)
 const DEFENDER_OFFENSIVE_SPREAD = 0.45;     // Étalement défenseurs en attaque
@@ -601,6 +606,48 @@ class Player {
         // Incrémenter le temps de possession
         this.possessionTime++;
 
+        // === TIRS DE DÉFENSEURS (Slapshot) ===
+        if (this.role === 'defenseman') {
+            const inSlapshotZone = this.team === 'home'
+                ? (this.x > rinkWidth * (1 - SLAPSHOT_ZONE_RATIO) && this.x < rinkWidth * (1 - SHOT_ZONE_RATIO))
+                : (this.x < rinkWidth * SLAPSHOT_ZONE_RATIO && this.x > rinkWidth * SHOT_ZONE_RATIO);
+
+            if (inSlapshotZone) {
+                // REVIEW: Amélioration critique - Vérification de ligne de tir "tunnel" plutôt que radiale
+                // On vérifie un rectangle devant le joueur vers le but : Longueur 150px, Largeur 30px
+                const laneLength = 150;
+                const laneWidth = 30;
+
+                const hasClearShot = !allPlayers.some(p => {
+                    if (p.team === this.team || p.role === 'goalie') return false;
+
+                    const dx = p.x - this.x;
+                    const dy = Math.abs(p.y - this.y);
+
+                    // Vérifier si dans la direction du but
+                    const isTowardsGoal = this.team === 'home' ? dx > 0 : dx < 0;
+
+                    if (!isTowardsGoal) return false;
+
+                    // Vérifier si dans le "tunnel" de tir
+                    return Math.abs(dx) < laneLength && dy < laneWidth;
+                });
+
+                // 40% de chance de tirer si la voie est libre
+                if (hasClearShot && Math.random() < 0.40) {
+                    // Tir puissant moins précis
+                    // Variance doublée par rapport à la constante pour couvrir une zone plus large -> [-90, +90]
+                    const shotY = goalY + (Math.random() - 0.5) * SLAPSHOT_ACCURACY_VARIANCE * 2;
+                    this.hasPuck = false;
+                    puck.shoot(goalX, shotY, SLAPSHOT_POWER);
+                    game.lastShooter = this;
+                    this.possessionTime = 0;
+                    this.contestedFrames = 0;
+                    return { action: true };
+                }
+            }
+        }
+
         // Zone de tir ?
         const inShotZone = this.team === 'home'
             ? this.x > rinkWidth * (1 - SHOT_ZONE_RATIO)
@@ -770,11 +817,47 @@ class Player {
                 }
             }
         } else {
-            // Défenseurs : suivre l'attaque mais en retrait avec étalement vertical
-            const supportDepth = this.team === 'home' ? 80 : -80;
-            targetX = this.team === 'home'
-                ? Math.min(carrier.x + supportDepth, rinkWidth - 150)
-                : Math.max(carrier.x + supportDepth, 150);
+            // Défenseurs : Se placer à la ligne rouge pour bloquer et tirer de loin (Slapshots)
+            // STRATÉGIE "TOTAL HOCKEY" : On ne recule plus !
+            const redLine = rinkWidth / 2;
+            const carrierInOffensiveZone = this.team === 'home'
+                ? carrier.x > redLine
+                : carrier.x < redLine;
+
+            if (this.team === 'home') {
+                // ÉQUIPE ROUGE (Attaque vers la droite >)
+                if (carrierInOffensiveZone) {
+                    // Si le palet est en zone offensive, on se colle à la ligne rouge (ou légèrement après)
+                    // On ne recule pas ! On reste en soutien haut.
+                    targetX = redLine + 60; // Juste après la ligne rouge
+                } else {
+                    // Transition : suivre le porteur
+                    targetX = Math.max(redLine - 100, carrier.x - 150);
+                }
+            } else {
+                // ÉQUIPE BLEUE (Attaque vers la gauche <)
+                if (carrierInOffensiveZone) {
+                    // Si le palet est en zone offensive, on se colle à la ligne rouge
+                    targetX = redLine - 60; // Juste avant la ligne rouge
+                } else {
+                    // Transition
+                    targetX = Math.min(redLine + 100, carrier.x + 150);
+                }
+            }
+
+            // BOOST DE VITESSE (SPRINT)
+            // Si on est loin de la cible (> 100px), on fonce !
+            if (Math.abs(this.x - targetX) > 100) {
+                const dx = targetX - this.x;
+                const dy = targetY - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 0) {
+                    // Vitesse très élevée pour se replacer (4.0 = très rapide)
+                    const sprintBonus = 4.0;
+                    this.x += (dx / dist) * sprintBonus;
+                    this.y += (dy / dist) * sprintBonus;
+                }
+            }
 
             // Positionnement vertical : haut/bas selon homeY initial
             const isTopDefender = this.homeY < rinkHeight / 2;
@@ -838,19 +921,66 @@ class Player {
                 }
             }
         } else {
-            // Défenseurs : protection de zone, jamais de chasse
-            const defenseOffset = this.team === 'home' ? -80 : 80;
-            targetX = puck.x + defenseOffset;
-            // Garder la distance minimale du but
-            const minDefenseX = this.team === 'home' ? 120 : rinkWidth - 120;
-            targetX = this.team === 'home'
-                ? Math.max(targetX, minDefenseX)
-                : Math.min(targetX, minDefenseX);
+            // === DÉFENSEURS : ACTIVE ZONE DEFENSE ===
+            const myGoalX = this.team === 'home' ? 0 : rinkWidth;
+            const isTopSide = this.homeY < rinkHeight / 2;
 
-            // Étalement vertical selon homeY
-            const isTopDefender = this.homeY < rinkHeight / 2;
-            const defensiveSpread = rinkHeight * 0.35;
-            targetY = rinkHeight / 2 + (isTopDefender ? -defensiveSpread : defensiveSpread);
+            // 1. Définir ma Zone de Responsabilité (Haut/Bas)
+            // Le palet est-il dans ma "moitié" verticale ?
+            const puckInMyZone = isTopSide
+                ? puck.y < rinkHeight / 2 + 20 // Marge de recouvrement
+                : puck.y > rinkHeight / 2 - 20;
+
+            const distToPuck = this.distanceTo(puck.x, puck.y);
+            const distToMyGoal = Math.abs(this.x - myGoalX);
+            const noRetreatLine = rinkWidth * NO_RETREAT_LINE_RATIO;
+
+            // 2. Décision (State Machine)
+            const isDeepInZone = this.team === 'home'
+                ? puck.x < noRetreatLine
+                : puck.x > rinkWidth - noRetreatLine;
+
+            if (puckInMyZone && (distToPuck < DEFENSIVE_ENGAGEMENT_DIST || isDeepInZone)) {
+                // CAS A : ENGAGEMENT (Palet dans ma zone ET (proche OU ligne franchie))
+                // On fonce sur le porteur !
+                targetX = puck.x;
+                targetY = puck.y;
+            } else if (!puckInMyZone) {
+                // CAS B : COUVERTURE DU SLOT (Palet de l'autre côté)
+                // Position X : Entre le palet et le but
+                const midX = (myGoalX + puck.x) / 2;
+
+                // Ne pas reculer dans le gardien (marge 60px), mais IGNORER la noRetreatLine
+                // car on doit couvrir le slot même si le jeu est profond.
+                const minCoverX = 60;
+                targetX = this.team === 'home'
+                    ? Math.max(midX, minCoverX)
+                    : Math.min(midX, rinkWidth - minCoverX);
+
+                // Position Y : Centre de la patinoire (Slot)
+                targetY = rinkHeight / 2;
+                targetY += (isTopSide ? -20 : 20);
+            } else {
+                // CAS C : GAP CONTROL (Palet loin ou Zone Neutre)
+                // Reculer en gardant l'écart, mais s'arrêter à la ligne de non-recul
+                const defenseOffset = this.team === 'home' ? -80 : 80;
+                let idealX = puck.x + defenseOffset;
+
+                // Ici on applique la limitation "No Retreat" pour forcer le duel à la ligne
+                if (this.team === 'home') {
+                    targetX = Math.max(idealX, noRetreatLine);
+                } else {
+                    targetX = Math.min(idealX, rinkWidth - noRetreatLine);
+                }
+
+                // S'aligner avec le palet verticalement mais rester dans sa zone
+                targetY = puck.y;
+                if (isTopSide) {
+                    targetY = Math.min(targetY, rinkHeight / 2 - 10);
+                } else {
+                    targetY = Math.max(targetY, rinkHeight / 2 + 10);
+                }
+            }
         }
 
         // Éviter l'agglutinement avec les coéquipiers
