@@ -622,8 +622,8 @@ class Player {
             return this.forcePass(puck, allPlayers, rinkWidth, rinkHeight, game);
         }
 
-        // Tirer si en zone de tir - 55% de chances de tirer
-        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.55) {
+        // Tirer si en zone de tir - 77% de chances de tirer
+        if (inShotZone && nearbyOpponents <= 1 && Math.random() < 0.77) {
             const shotY = goalY + (Math.random() - 0.5) * 60;
             this.hasPuck = false;  // IMPORTANT: marquer comme n'ayant plus le palet AVANT le tir
             puck.shoot(goalX, shotY, SHOT_POWER);
@@ -633,8 +633,8 @@ class Player {
             return { action: true };
         }
 
-        // Tir sous pression (2 adversaires proches) - 35% de chances
-        if (inShotZone && nearbyOpponents <= 2 && Math.random() < 0.35) {
+        // Tir sous pression (2 adversaires proches) - 57% de chances
+        if (inShotZone && nearbyOpponents <= 2 && Math.random() < 0.57) {
             const shotY = goalY + (Math.random() - 0.5) * 80;
             this.hasPuck = false;
             puck.shoot(goalX, shotY, SHOT_POWER * 0.9);  // Tir légèrement moins puissant car sous pression
