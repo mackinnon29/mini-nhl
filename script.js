@@ -1149,6 +1149,11 @@ class Game {
         this.starOfTheMatch = null;  // Objet {number, team, role, reason}
         this.starOfTheMatchTimer = 0;  // Timer pour l'animation
 
+        // Tour du chapeau (hat trick)
+        this.hatTrickMessage = null;   // Message à afficher
+        this.hatTrickTimer = 0;        // Timer pour l'affichage (120 frames = 2 secondes)
+        this.hatTrickPlayer = null;    // Joueur ayant réalisé le tour du chapeau
+
         this.running = false;
 
         document.getElementById('start-btn').addEventListener('click', () => {
@@ -1236,8 +1241,20 @@ class Game {
             }
         }
 
-        // Si le jeu tourne ET qu'il n'y a pas de message de but affiché ET pas de message de prolongation
-        if (this.running && this.goalMessageTimer <= 0 && this.overtimeMessageTimer <= 0) {
+        // Gérer le délai du message de tour du chapeau
+        if (this.hatTrickTimer > 0) {
+            this.hatTrickTimer--;
+
+            // Si le message est fini, relancer le chronomètre
+            if (this.hatTrickTimer === 0) {
+                this.hatTrickMessage = null;
+                this.hatTrickPlayer = null;
+                this.startTimer();  // Relancer le chronomètre
+            }
+        }
+
+        // Si le jeu tourne ET qu'il n'y a pas de message affiché (but, prolongation, tour du chapeau)
+        if (this.running && this.goalMessageTimer <= 0 && this.overtimeMessageTimer <= 0 && this.hatTrickTimer <= 0) {
             // Décrémenter le cooldown de but
             if (this.goalCooldown > 0) this.goalCooldown--;
 
@@ -1278,6 +1295,7 @@ class Game {
         this.drawScorers();      // Dessiner les numéros des buteurs
         this.drawStarOfTheMatch();  // Dessiner l'étoile du match
         this.drawOvertimeMessage(); // Dessiner le message de prolongation
+        this.drawHatTrickMessage(); // Dessiner le message de tour du chapeau
 
         requestAnimationFrame(this.animate);
     }
@@ -1362,6 +1380,19 @@ class Game {
                     this.goalMessageTimer = 180;
                 }
                 console.log(`⚽ BUT ! Score: Home ${this.scoreHome} - ${this.scoreAway} Away`);
+
+                // Vérifier si c'est un tour du chapeau (3 buts par le même joueur)
+                if (this.lastShooter) {
+                    const scorerList = scoringTeam === 'home' ? this.scorersHome : this.scorersAway;
+                    const goalsCount = scorerList.filter(n => n === this.lastShooter.number).length;
+                    if (goalsCount === 3) {
+                        console.log(`🎩 TOUR DU CHAPEAU ! #${this.lastShooter.number}`);
+                        this.hatTrickMessage = `Tour du chapeau ! #${this.lastShooter.number}`;
+                        this.hatTrickPlayer = this.lastShooter;
+                        this.hatTrickTimer = 120;  // 2 secondes
+                        this.stopTimer();  // Arrêter le chronomètre
+                    }
+                }
 
                 // En prolongation, le but met fin au match immédiatement (mort subite)
                 if (this.isOvertime) {
@@ -1704,6 +1735,86 @@ class Game {
         ctx.font = `bold ${Math.floor(20 * pulse)}px Arial`;
         ctx.fillStyle = '#FFF';
         ctx.fillText('Mort Subite', centerX, centerY + 25);
+
+        ctx.restore();
+    }
+
+    drawHatTrickMessage() {
+        if (this.hatTrickTimer <= 0 || !this.hatTrickMessage) return;
+
+        const ctx = this.rink.ctx;
+        ctx.save();
+
+        // Position : centre de l'écran (même position que l'étoile du match)
+        const centerX = this.rink.canvas.width / 2;
+        const centerY = this.rink.margin + this.rink.height / 2;
+
+        // Animation de pulsation légère
+        const pulse = 1 + Math.sin(this.hatTrickTimer * 0.15) * 0.05;
+
+        // Dimensions du cadre
+        const boxWidth = 300 * pulse;
+        const boxHeight = 70 * pulse;
+
+        // Fond doré avec dégradé (similaire à l'étoile du match)
+        const gradient = ctx.createLinearGradient(
+            centerX - boxWidth / 2,
+            centerY - boxHeight / 2,
+            centerX + boxWidth / 2,
+            centerY + boxHeight / 2
+        );
+        gradient.addColorStop(0, '#FFD700');  // Or
+        gradient.addColorStop(0.5, '#FFF8DC');  // Or clair
+        gradient.addColorStop(1, '#DAA520');  // Or foncé
+
+        // Dessiner le cadre avec coins arrondis
+        ctx.beginPath();
+        ctx.roundRect(
+            centerX - boxWidth / 2,
+            centerY - boxHeight / 2,
+            boxWidth,
+            boxHeight,
+            12
+        );
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Bordure dorée brillante
+        ctx.strokeStyle = '#B8860B';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Effet d'ombre
+        ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+        ctx.shadowBlur = 20;
+
+        // Texte principal "Tour du chapeau !" en blanc
+        ctx.font = `bold ${Math.floor(28 * pulse)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Contour noir pour lisibilité
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 3;
+        ctx.strokeText('🎩 Tour du chapeau !', centerX, centerY - 8);
+
+        // Texte blanc
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText('🎩 Tour du chapeau !', centerX, centerY - 8);
+
+        // Reset shadow pour le numéro
+        ctx.shadowBlur = 0;
+
+        // Numéro du joueur en dessous
+        if (this.hatTrickPlayer) {
+            ctx.font = `bold ${Math.floor(22 * pulse)}px Arial`;
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            const playerText = `#${this.hatTrickPlayer.number}`;
+            ctx.strokeText(playerText, centerX, centerY + 18);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(playerText, centerX, centerY + 18);
+        }
 
         ctx.restore();
     }
@@ -2159,6 +2270,11 @@ class Game {
         // Réinitialiser l'étoile du match
         this.starOfTheMatch = null;
         this.starOfTheMatchTimer = 0;
+
+        // Réinitialiser le tour du chapeau
+        this.hatTrickMessage = null;
+        this.hatTrickTimer = 0;
+        this.hatTrickPlayer = null;
 
         console.log(`🏒 Nouveau match ! Les scores sont remis à zéro.`);
     }
