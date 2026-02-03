@@ -980,6 +980,10 @@ class Game {
         this.goalMessage = null;      // Texte du message ("Équipe rouge marque !" etc.)
         this.goalMessageTimer = 0;    // Timer pour l'affichage du message
 
+        // Liste des buteurs pour chaque équipe
+        this.scorersHome = [];  // Numéros des joueurs de l'équipe rouge ayant marqué
+        this.scorersAway = [];  // Numéros des joueurs de l'équipe bleue ayant marqué
+
         // Système de chronomètre
         this.gameTime = 30;  // 30 secondes
         this.timerInterval = null;
@@ -1098,6 +1102,7 @@ class Game {
         ctx.restore();
 
         this.drawGoalMessage(); // Dessiner le message de but
+        this.drawScorers();      // Dessiner les numéros des buteurs
 
         requestAnimationFrame(this.animate);
     }
@@ -1138,12 +1143,15 @@ class Game {
 
             // Probabilité de but selon le tireur :
             // - #29 équipe rouge (home) : 75%
+            // - #88 équipe rouge (home) : 60%
             // - #97 équipe bleue (away) : 65%
             // - Autres joueurs : 55%
             let goalProbability = 0.55;
             if (this.lastShooter) {
                 if (this.lastShooter.number === 29 && this.lastShooter.team === 'home') {
                     goalProbability = 0.75;
+                } else if (this.lastShooter.number === 88 && this.lastShooter.team === 'home') {
+                    goalProbability = 0.60;
                 } else if (this.lastShooter.number === 97 && this.lastShooter.team === 'away') {
                     goalProbability = 0.65;
                 }
@@ -1153,6 +1161,10 @@ class Game {
                 // BUT !
                 if (scoringTeam === 'home') {
                     this.scoreHome++;
+                    // Enregistrer le buteur
+                    if (this.lastShooter && this.lastShooter.team === 'home') {
+                        this.scorersHome.push(this.lastShooter.number);
+                    }
                     // Allumer la lumière de la cage droite (cage des bleus où home a marqué)
                     this.goalLightRight = 180;  // 3 secondes de clignotement
                     // Exciter les supporters rouges (équipe home)
@@ -1162,6 +1174,10 @@ class Game {
                     this.goalMessageTimer = 180;
                 } else {
                     this.scoreAway++;
+                    // Enregistrer le buteur
+                    if (this.lastShooter && this.lastShooter.team === 'away') {
+                        this.scorersAway.push(this.lastShooter.number);
+                    }
                     // Allumer la lumière de la cage gauche (cage des rouges où away a marqué)
                     this.goalLightLeft = 180;  // 3 secondes de clignotement
                     // Exciter les supporters bleus (équipe away)
@@ -1356,6 +1372,51 @@ class Game {
         ctx.fillText(this.goalMessage, centerX, centerY);
 
         ctx.restore();  // Restaurer l'état du contexte
+    }
+
+    drawScorers() {
+        const ctx = this.rink.ctx;
+        ctx.save();
+
+        // Position Y : dans la zone des spectateurs, sous la patinoire (au niveau du bouton)
+        const baseY = this.rink.margin + this.rink.height + 25;
+        const lineHeight = 18;
+
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Buteurs de l'équipe rouge (home) - affichés sous leur cage (côté gauche)
+        // La cage gauche est à goalLineOffset = 60, donc X = margin + 60
+        const redX = this.rink.margin + 60;
+        this.scorersHome.forEach((number, index) => {
+            const y = baseY + index * lineHeight;
+            // Fond semi-transparent pour lisibilité
+            ctx.fillStyle = 'rgba(204, 0, 0, 0.8)';
+            const text = `#${number}`;
+            const textWidth = ctx.measureText(text).width;
+            ctx.fillRect(redX - textWidth / 2 - 4, y - 9, textWidth + 8, 18);
+            // Texte
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(text, redX, y);
+        });
+
+        // Buteurs de l'équipe bleue (away) - affichés sous leur cage (côté droit)
+        // La cage droite est à width - goalLineOffset = width - 60
+        const blueX = this.rink.margin + this.rink.width - 60;
+        this.scorersAway.forEach((number, index) => {
+            const y = baseY + index * lineHeight;
+            // Fond semi-transparent pour lisibilité
+            ctx.fillStyle = 'rgba(0, 51, 204, 0.8)';
+            const text = `#${number}`;
+            const textWidth = ctx.measureText(text).width;
+            ctx.fillRect(blueX - textWidth / 2 - 4, y - 9, textWidth + 8, 18);
+            // Texte
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(text, blueX, y);
+        });
+
+        ctx.restore();
     }
 
     checkPuckControl() {
@@ -1716,6 +1777,10 @@ class Game {
         // Réinitialiser les lumières de but
         this.goalLightTimerRed = 0;
         this.goalLightTimerBlue = 0;
+
+        // Réinitialiser les listes de buteurs
+        this.scorersHome = [];
+        this.scorersAway = [];
 
         console.log(`🏒 Nouveau match ! Les scores sont remis à zéro.`);
     }
