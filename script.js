@@ -933,6 +933,10 @@ class Game {
         this.goalCooldown = 0;  // Empêche les buts multiples
         this.lastShooter = null;  // Dernier joueur ayant tiré au but
 
+        // Système de lumières de but
+        this.goalLightLeft = 0;   // Timer pour la lumière gauche (cage des bleus)
+        this.goalLightRight = 0;  // Timer pour la lumière droite (cage des rouges)
+
         // Système de chronomètre
         this.gameTime = 30;  // 30 secondes
         this.timerInterval = null;
@@ -1033,6 +1037,7 @@ class Game {
         }
 
         this.rink.draw();
+        this.drawGoalLights();  // Dessiner les lumières de but
         this.drawScore();
 
         // Dessiner les joueurs et le palet avec le décalage des tribunes
@@ -1097,8 +1102,12 @@ class Game {
                 // BUT !
                 if (scoringTeam === 'home') {
                     this.scoreHome++;
+                    // Allumer la lumière de la cage droite (cage des bleus où home a marqué)
+                    this.goalLightRight = 180;  // 3 secondes de clignotement
                 } else {
                     this.scoreAway++;
+                    // Allumer la lumière de la cage gauche (cage des rouges où away a marqué)
+                    this.goalLightLeft = 180;  // 3 secondes de clignotement
                 }
                 console.log(`⚽ BUT ! Score: Home ${this.scoreHome} - ${this.scoreAway} Away`);
 
@@ -1182,6 +1191,65 @@ class Game {
         // Score équipe Away (bleu)
         ctx.fillStyle = '#0033cc';
         ctx.fillText(this.scoreAway.toString(), centerX + 40, 35);
+    }
+
+    drawGoalLights() {
+        const ctx = this.rink.ctx;
+        const goalLineOffset = 60;
+        const lightRadius = 12;
+        const lightY = this.rink.margin - 20;  // Au-dessus des cages (dans la zone des spectateurs)
+
+        // Décrémenter les timers de lumières
+        if (this.goalLightLeft > 0) this.goalLightLeft--;
+        if (this.goalLightRight > 0) this.goalLightRight--;
+
+        // Fonction pour déterminer si la lumière est en phase "allumée" (clignotement binaire)
+        // Alterne toutes les 10 frames (~6 clignotements par seconde)
+        const isBlinkOn = (timer) => Math.floor(timer / 10) % 2 === 0;
+
+        // Lumière au-dessus de la cage gauche (où les rouges défendent)
+        const leftLightX = this.rink.margin + goalLineOffset;
+        ctx.beginPath();
+        ctx.arc(leftLightX, lightY, lightRadius, 0, Math.PI * 2);
+        if (this.goalLightLeft > 0 && isBlinkOn(this.goalLightLeft)) {
+            // Lumière rouge clair (allumée)
+            ctx.fillStyle = '#ff3300';
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 25;
+        } else {
+            // Lumière rouge foncé (éteinte ou phase "off" du clignotement)
+            ctx.fillStyle = '#4a0000';
+            ctx.shadowBlur = 0;
+        }
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Contour métallique
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Lumière au-dessus de la cage droite (où les bleus défendent)
+        const rightLightX = this.rink.margin + this.rink.width - goalLineOffset;
+        ctx.beginPath();
+        ctx.arc(rightLightX, lightY, lightRadius, 0, Math.PI * 2);
+        if (this.goalLightRight > 0 && isBlinkOn(this.goalLightRight)) {
+            // Lumière rouge clair (allumée)
+            ctx.fillStyle = '#ff3300';
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 25;
+        } else {
+            // Lumière rouge foncé (éteinte ou phase "off" du clignotement)
+            ctx.fillStyle = '#4a0000';
+            ctx.shadowBlur = 0;
+        }
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Contour métallique
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 2;
+        ctx.stroke();
     }
 
     checkPuckControl() {
