@@ -588,6 +588,7 @@ class Player {
             const shotY = goalY + (Math.random() - 0.5) * 60;
             this.hasPuck = false;  // IMPORTANT: marquer comme n'ayant plus le palet AVANT le tir
             puck.shoot(goalX, shotY, SHOT_POWER);
+            game.lastShooter = this;  // Enregistrer le tireur
             this.possessionTime = 0;
             this.contestedFrames = 0;
             return { action: true };
@@ -598,6 +599,7 @@ class Player {
             const shotY = goalY + (Math.random() - 0.5) * 80;
             this.hasPuck = false;
             puck.shoot(goalX, shotY, SHOT_POWER * 0.9);  // Tir légèrement moins puissant car sous pression
+            game.lastShooter = this;  // Enregistrer le tireur
             this.possessionTime = 0;
             this.contestedFrames = 0;
             return { action: true };
@@ -929,6 +931,7 @@ class Game {
         this.scoreHome = 0;
         this.scoreAway = 0;
         this.goalCooldown = 0;  // Empêche les buts multiples
+        this.lastShooter = null;  // Dernier joueur ayant tiré au but
 
         this.running = false;
 
@@ -955,11 +958,11 @@ class Game {
         this.players.push(new Player(200, h / 2 + 50, 'home', 7, 'defenseman'));
 
         // Attaquants Home avec rôles spécifiques
-        const homeLW = new Player(350, h / 2 - 100, 'home', 29, 'forward');
+        const homeLW = new Player(350, h / 2 - 100, 'home', 62, 'forward');
         homeLW.forwardPosition = 'LW';
         this.players.push(homeLW);
 
-        const homeC = new Player(350, h / 2, 'home', 62, 'forward');
+        const homeC = new Player(350, h / 2, 'home', 29, 'forward');
         homeC.forwardPosition = 'C';
         this.players.push(homeC);
 
@@ -1060,8 +1063,18 @@ class Game {
             const distFromCenter = Math.abs(this.puck.y - centerY);
             const centerZone = this.rink.height * 0.25;  // Zone centrale = 50% du milieu
 
-            // Probabilité de but : 55% peu importe la zone
-            const goalProbability = 0.55;
+            // Probabilité de but selon le tireur :
+            // - #29 équipe rouge (home) : 75%
+            // - #97 équipe bleue (away) : 65%
+            // - Autres joueurs : 55%
+            let goalProbability = 0.55;
+            if (this.lastShooter) {
+                if (this.lastShooter.number === 29 && this.lastShooter.team === 'home') {
+                    goalProbability = 0.75;
+                } else if (this.lastShooter.number === 97 && this.lastShooter.team === 'away') {
+                    goalProbability = 0.65;
+                }
+            }
 
             if (Math.random() < goalProbability) {
                 // BUT !
