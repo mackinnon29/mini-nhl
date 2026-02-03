@@ -937,6 +937,7 @@ class Game {
         this.gameTime = 30;  // 30 secondes
         this.timerInterval = null;
         this.gameEnded = false;
+        this.isOvertime = false;  // Flag pour la prolongation (mort subite)
 
         this.running = false;
 
@@ -1100,7 +1101,14 @@ class Game {
                     this.scoreAway++;
                 }
                 console.log(`⚽ BUT ! Score: Home ${this.scoreHome} - ${this.scoreAway} Away`);
-                this.resetAfterGoal();
+
+                // En prolongation, le but met fin au match immédiatement (mort subite)
+                if (this.isOvertime) {
+                    console.log(`🚨 BUT EN PROLONGATION ! Fin du match !`);
+                    this.endGameFinal(scoringTeam);
+                } else {
+                    this.resetAfterGoal();
+                }
             }
             this.goalCooldown = 30;  // Cooldown pour éviter les détections multiples
         }
@@ -1407,6 +1415,9 @@ class Game {
         if (this.scoreHome === this.scoreAway) {
             console.log(`⏱️ Score nul ! Prolongation de 20 secondes...`);
 
+            // Activer le mode prolongation (mort subite)
+            this.isOvertime = true;
+
             // Ajouter 20 secondes
             this.gameTime = 20;
             this.updateTimerDisplay();
@@ -1444,7 +1455,12 @@ class Game {
             return;
         }
 
-        // Si pas de match nul, terminer le match
+        // Si pas de match nul, terminer le match normalement
+        this.endGameFinal(this.scoreHome > this.scoreAway ? 'home' : 'away');
+    }
+
+    endGameFinal(winningTeam) {
+        this.stopTimer();
         this.running = false;
         this.gameEnded = true;
 
