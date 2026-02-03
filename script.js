@@ -56,6 +56,10 @@ class Rink {
 
         // Générer les spectateurs une seule fois
         this.spectators = this.generateSpectators();
+
+        // Timer d'excitation des spectateurs (0 = pas d'excitation)
+        this.spectatorExcitementTimer = 0;
+        this.excitedTeamColor = null;  // 'red' ou 'blue'
     }
 
     generateSpectators() {
@@ -76,7 +80,7 @@ class Rink {
         for (let y = 5; y < this.margin - 5; y += spacing) {
             for (let x = 5; x < this.canvas.width - 5; x += spacing) {
                 const color = colors[Math.floor(pseudoRandom(seed++) * 2)];
-                spectators.push({ x, y, size: spectatorSize, color });
+                spectators.push({ x, y, baseX: x, baseY: y, size: spectatorSize, color });
             }
         }
 
@@ -84,7 +88,7 @@ class Rink {
         for (let y = this.canvas.height - this.margin + 5; y < this.canvas.height - 5; y += spacing) {
             for (let x = 5; x < this.canvas.width - 5; x += spacing) {
                 const color = colors[Math.floor(pseudoRandom(seed++) * 2)];
-                spectators.push({ x, y, size: spectatorSize, color });
+                spectators.push({ x, y, baseX: x, baseY: y, size: spectatorSize, color });
             }
         }
 
@@ -92,7 +96,7 @@ class Rink {
         for (let y = this.margin; y < this.canvas.height - this.margin; y += spacing) {
             for (let x = 5; x < this.margin - 5; x += spacing) {
                 const color = colors[Math.floor(pseudoRandom(seed++) * 2)];
-                spectators.push({ x, y, size: spectatorSize, color });
+                spectators.push({ x, y, baseX: x, baseY: y, size: spectatorSize, color });
             }
         }
 
@@ -100,7 +104,7 @@ class Rink {
         for (let y = this.margin; y < this.canvas.height - this.margin; y += spacing) {
             for (let x = this.canvas.width - this.margin + 5; x < this.canvas.width - 5; x += spacing) {
                 const color = colors[Math.floor(pseudoRandom(seed++) * 2)];
-                spectators.push({ x, y, size: spectatorSize, color });
+                spectators.push({ x, y, baseX: x, baseY: y, size: spectatorSize, color });
             }
         }
 
@@ -160,10 +164,45 @@ class Rink {
     }
 
     drawSpectators() {
-        for (const spec of this.spectators) {
-            this.ctx.fillStyle = spec.color;
-            this.ctx.fillRect(spec.x, spec.y, spec.size, spec.size);
+        // Décrémenter le timer d'excitation
+        if (this.spectatorExcitementTimer > 0) {
+            this.spectatorExcitementTimer--;
         }
+
+        for (const spec of this.spectators) {
+            let drawX = spec.baseX;
+            let drawY = spec.baseY;
+
+            // Animer les spectateurs de l'équipe qui a marqué
+            if (this.spectatorExcitementTimer > 0) {
+                const isExcited = (this.excitedTeamColor === 'red' && spec.color === '#cc0000') ||
+                    (this.excitedTeamColor === 'blue' && spec.color === '#0033cc');
+
+                if (isExcited) {
+                    // Animation de sautillement avec offset basé sur la position pour un effet de vague
+                    const phase = (spec.baseX + spec.baseY) * 0.1 + this.spectatorExcitementTimer * 0.5;
+                    const jumpHeight = 4 * Math.sin(phase);
+                    drawY = spec.baseY + jumpHeight;
+
+                    // Légère oscillation horizontale aussi
+                    const sway = 2 * Math.sin(phase * 0.7);
+                    drawX = spec.baseX + sway;
+                }
+            }
+
+            // Mettre à jour les positions actuelles
+            spec.x = drawX;
+            spec.y = drawY;
+
+            this.ctx.fillStyle = spec.color;
+            this.ctx.fillRect(drawX, drawY, spec.size, spec.size);
+        }
+    }
+
+    // Déclencher l'excitation des spectateurs d'une équipe
+    triggerSpectatorExcitement(teamColor) {
+        this.spectatorExcitementTimer = 180;  // 3 secondes (même durée que la lumière de but)
+        this.excitedTeamColor = teamColor;  // 'red' ou 'blue'
     }
 
     drawIce() {
@@ -1001,11 +1040,11 @@ class Game {
         awayLW.forwardPosition = 'LW';
         this.players.push(awayLW);
 
-        const awayC = new Player(w - 350, h / 2, 'away', 93, 'forward');
+        const awayC = new Player(w - 350, h / 2, 'away', 97, 'forward');
         awayC.forwardPosition = 'C';
         this.players.push(awayC);
 
-        const awayRW = new Player(w - 350, h / 2 + 100, 'away', 97, 'forward');
+        const awayRW = new Player(w - 350, h / 2 + 100, 'away', 93, 'forward');
         awayRW.forwardPosition = 'RW';
         this.players.push(awayRW);
     }
@@ -1104,10 +1143,14 @@ class Game {
                     this.scoreHome++;
                     // Allumer la lumière de la cage droite (cage des bleus où home a marqué)
                     this.goalLightRight = 180;  // 3 secondes de clignotement
+                    // Exciter les supporters rouges (équipe home)
+                    this.rink.triggerSpectatorExcitement('red');
                 } else {
                     this.scoreAway++;
                     // Allumer la lumière de la cage gauche (cage des rouges où away a marqué)
                     this.goalLightLeft = 180;  // 3 secondes de clignotement
+                    // Exciter les supporters bleus (équipe away)
+                    this.rink.triggerSpectatorExcitement('blue');
                 }
                 console.log(`⚽ BUT ! Score: Home ${this.scoreHome} - ${this.scoreAway} Away`);
 
