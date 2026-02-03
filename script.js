@@ -933,14 +933,30 @@ class Game {
         this.goalCooldown = 0;  // Empêche les buts multiples
         this.lastShooter = null;  // Dernier joueur ayant tiré au but
 
+        // Système de chronomètre
+        this.gameTime = 30;  // 30 secondes
+        this.timerInterval = null;
+        this.gameEnded = false;
+
         this.running = false;
 
         document.getElementById('start-btn').addEventListener('click', () => {
+            // Si le match est terminé, ne rien faire
+            if (this.gameEnded) return;
+
             this.running = !this.running;
 
-            if (this.running && !this.puckCarrier && Math.abs(this.puck.vx) < 0.1) {
-                this.puck.vx = (Math.random() - 0.5) * 15;
-                this.puck.vy = (Math.random() - 0.5) * 15;
+            if (this.running) {
+                // Démarrer le chronomètre
+                this.startTimer();
+
+                if (!this.puckCarrier && Math.abs(this.puck.vx) < 0.1) {
+                    this.puck.vx = (Math.random() - 0.5) * 15;
+                    this.puck.vy = (Math.random() - 0.5) * 15;
+                }
+            } else {
+                // Mettre en pause le chronomètre
+                this.stopTimer();
             }
         });
 
@@ -1351,6 +1367,53 @@ class Game {
                 }
             }
         }
+    }
+
+    startTimer() {
+        // Éviter de démarrer plusieurs intervalles
+        if (this.timerInterval) return;
+
+        this.timerInterval = setInterval(() => {
+            if (this.gameTime > 0) {
+                this.gameTime--;
+                this.updateTimerDisplay();
+
+                if (this.gameTime === 0) {
+                    this.endGame();
+                }
+            }
+        }, 1000);
+    }
+
+    stopTimer() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+    }
+
+    updateTimerDisplay() {
+        const minutes = Math.floor(this.gameTime / 60);
+        const seconds = this.gameTime % 60;
+        const display = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        document.getElementById('timer').textContent = display;
+    }
+
+    endGame() {
+        this.stopTimer();
+        this.running = false;
+        this.gameEnded = true;
+
+        // Afficher le résultat dans la console
+        let result;
+        if (this.scoreHome > this.scoreAway) {
+            result = '🏆 Équipe Rouge gagne !';
+        } else if (this.scoreAway > this.scoreHome) {
+            result = '🏆 Équipe Bleue gagne !';
+        } else {
+            result = '🤝 Match nul !';
+        }
+        console.log(`⏱️ FIN DU MATCH ! Score final: Rouge ${this.scoreHome} - ${this.scoreAway} Bleu. ${result}`);
     }
 }
 
