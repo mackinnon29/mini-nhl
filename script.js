@@ -1153,7 +1153,8 @@ class Game {
 
         ctx.beginPath();
         ctx.roundRect(bgX, bgY, bgWidth, bgHeight, borderRadius);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        // Fond gris si le match est terminé, sinon blanc
+        ctx.fillStyle = this.gameEnded ? 'rgba(150, 150, 150, 0.9)' : 'rgba(255, 255, 255, 0.9)';
         ctx.fill();
         ctx.strokeStyle = '#ccc';
         ctx.lineWidth = 1;
@@ -1403,6 +1404,25 @@ class Game {
         this.stopTimer();
         this.running = false;
         this.gameEnded = true;
+
+        // Remettre les joueurs au centre
+        this.players.forEach(player => {
+            player.x = player.homeX;
+            player.y = player.homeY;
+            player.hasPuck = false;
+            player.passCooldown = 0;
+            player.possessionTime = 0;
+            player.contestedFrames = 0;
+        });
+
+        // Remettre le palet au centre
+        this.puck.x = this.rink.width / 2;
+        this.puck.y = this.rink.height / 2;
+        this.puck.vx = 0;
+        this.puck.vy = 0;
+        this.puck.release();
+        this.puckCarrier = null;
+        this.teamWithPuck = null;
 
         // Afficher le résultat dans la console
         let result;
