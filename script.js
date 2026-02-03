@@ -990,6 +990,10 @@ class Game {
         this.gameEnded = false;
         this.isOvertime = false;  // Flag pour la prolongation (mort subite)
 
+        // Étoile du match
+        this.starOfTheMatch = null;  // Objet {number, team, role, reason}
+        this.starOfTheMatchTimer = 0;  // Timer pour l'animation
+
         this.running = false;
 
         document.getElementById('start-btn').addEventListener('click', () => {
@@ -1103,6 +1107,7 @@ class Game {
 
         this.drawGoalMessage(); // Dessiner le message de but
         this.drawScorers();      // Dessiner les numéros des buteurs
+        this.drawStarOfTheMatch();  // Dessiner l'étoile du match
 
         requestAnimationFrame(this.animate);
     }
@@ -1419,6 +1424,81 @@ class Game {
         ctx.restore();
     }
 
+    drawStarOfTheMatch() {
+        // Afficher seulement si le match est terminé et qu'il y a une étoile
+        if (!this.gameEnded || !this.starOfTheMatch) return;
+
+        const ctx = this.rink.ctx;
+        ctx.save();
+
+        // Position : centre de l'écran, juste au-dessus du centre de la patinoire
+        const centerX = this.rink.canvas.width / 2;
+        const centerY = this.rink.margin + this.rink.height / 2 - 50;
+
+        // Animation de pulsation légère
+        if (this.starOfTheMatchTimer > 0) {
+            this.starOfTheMatchTimer--;
+        }
+        const pulse = 1 + Math.sin(this.starOfTheMatchTimer * 0.1) * 0.05;
+
+        // Dimensions du cadre
+        const boxWidth = 120 * pulse;
+        const boxHeight = 80 * pulse;
+
+        // Fond doré avec dégradé
+        const gradient = ctx.createLinearGradient(
+            centerX - boxWidth / 2,
+            centerY - boxHeight / 2,
+            centerX + boxWidth / 2,
+            centerY + boxHeight / 2
+        );
+        gradient.addColorStop(0, '#FFD700');  // Or
+        gradient.addColorStop(0.5, '#FFF8DC');  // Or clair
+        gradient.addColorStop(1, '#DAA520');  // Or foncé
+
+        // Dessiner le cadre avec coins arrondis
+        ctx.beginPath();
+        ctx.roundRect(
+            centerX - boxWidth / 2,
+            centerY - boxHeight / 2,
+            boxWidth,
+            boxHeight,
+            12
+        );
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Bordure dorée brillante
+        ctx.strokeStyle = '#B8860B';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Effet d'ombre
+        ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+        ctx.shadowBlur = 20;
+
+        // Étoile icône au-dessus
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#B8860B';
+        ctx.fillText('★ ÉTOILE DU MATCH ★', centerX, centerY - 20);
+
+        // Reset shadow pour le texte principal
+        ctx.shadowBlur = 0;
+
+        // Numéro du joueur en blanc avec contour
+        ctx.font = 'bold 32px Arial';
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        const numberText = `#${this.starOfTheMatch.number}`;
+        ctx.strokeText(numberText, centerX, centerY + 15);
+        ctx.fillText(numberText, centerX, centerY + 15);
+
+        ctx.restore();
+    }
+
     checkPuckControl() {
         // Décrémenter le timer de priorité de passe
         if (this.passPriorityTimer > 0) {
@@ -1731,6 +1811,89 @@ class Game {
             result = '🤝 Match nul !';
         }
         console.log(`⏱️ FIN DU MATCH ! Score final: Rouge ${this.scoreHome} - ${this.scoreAway} Bleu. ${result}`);
+
+        // Déterminer l'étoile du match
+        this.determineStarOfTheMatch();
+    }
+
+    determineStarOfTheMatch() {
+        // 1. Vérifier si un gardien n'a pas encaissé de but
+        const homeGoalie = this.players.find(p => p.team === 'home' && p.role === 'goalie');
+        const awayGoalie = this.players.find(p => p.team === 'away' && p.role === 'goalie');
+
+        // Gardien rouge n'a pas encaissé de but (scoreAway === 0)
+        if (this.scoreAway === 0 && homeGoalie) {
+            this.starOfTheMatch = {
+                number: homeGoalie.number,
+                team: 'home',
+                role: 'goalie',
+                reason: 'blanchissage'
+            };
+            this.starOfTheMatchTimer = 300;  // 5 secondes d'affichage
+            console.log(`⭐ Étoile du match : #${homeGoalie.number} (gardien rouge) - Blanchissage !`);
+            return;
+        }
+
+        // Gardien bleu n'a pas encaissé de but (scoreHome === 0)
+        if (this.scoreHome === 0 && awayGoalie) {
+            this.starOfTheMatch = {
+                number: awayGoalie.number,
+                team: 'away',
+                role: 'goalie',
+                reason: 'blanchissage'
+            };
+            this.starOfTheMatchTimer = 300;
+            console.log(`⭐ Étoile du match : #${awayGoalie.number} (gardien bleu) - Blanchissage !`);
+            return;
+        }
+
+        // 2. Trouver le meilleur buteur
+        // Compter les buts par joueur
+        const goalCounts = {};
+
+        this.scorersHome.forEach(num => {
+            const key = `home-${num}`;
+            goalCounts[key] = (goalCounts[key] || 0) + 1;
+        });
+
+        this.scorersAway.forEach(num => {
+            const key = `away-${num}`;
+            goalCounts[key] = (goalCounts[key] || 0) + 1;
+        });
+
+        // Trouver le maximum de buts
+        let maxGoals = 0;
+        for (const key in goalCounts) {
+            if (goalCounts[key] > maxGoals) {
+                maxGoals = goalCounts[key];
+            }
+        }
+
+        if (maxGoals === 0) {
+            // Pas de buts marqués (0-0 après prolongation ne devrait pas arriver, mais au cas où)
+            return;
+        }
+
+        // Trouver tous les joueurs avec le maximum de buts
+        const topScorers = [];
+        for (const key in goalCounts) {
+            if (goalCounts[key] === maxGoals) {
+                const [team, number] = key.split('-');
+                topScorers.push({ team, number: parseInt(number), goals: maxGoals });
+            }
+        }
+
+        // En cas d'égalité, tirer au sort
+        const winner = topScorers[Math.floor(Math.random() * topScorers.length)];
+
+        this.starOfTheMatch = {
+            number: winner.number,
+            team: winner.team,
+            role: 'forward',
+            reason: `${winner.goals} but${winner.goals > 1 ? 's' : ''}`
+        };
+        this.starOfTheMatchTimer = 300;
+        console.log(`⭐ Étoile du match : #${winner.number} (${winner.team === 'home' ? 'rouge' : 'bleu'}) - ${winner.goals} but(s) !`);
     }
 
     newGame() {
@@ -1781,6 +1944,10 @@ class Game {
         // Réinitialiser les listes de buteurs
         this.scorersHome = [];
         this.scorersAway = [];
+
+        // Réinitialiser l'étoile du match
+        this.starOfTheMatch = null;
+        this.starOfTheMatchTimer = 0;
 
         console.log(`🏒 Nouveau match ! Les scores sont remis à zéro.`);
     }
