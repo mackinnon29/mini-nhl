@@ -1008,6 +1008,11 @@ class Game {
             }
         });
 
+        // Bouton "Nouveau match"
+        document.getElementById('new-game-btn').addEventListener('click', () => {
+            this.newGame();
+        });
+
         this.animate = this.animate.bind(this);
         requestAnimationFrame(this.animate);
     }
@@ -1633,6 +1638,9 @@ class Game {
         this.running = false;
         this.gameEnded = true;
 
+        // Afficher le bouton "Nouveau match"
+        document.getElementById('new-game-btn').style.display = 'inline-block';
+
         // Remettre les joueurs au centre
         this.players.forEach(player => {
             player.x = player.homeX;
@@ -1662,6 +1670,54 @@ class Game {
             result = '🤝 Match nul !';
         }
         console.log(`⏱️ FIN DU MATCH ! Score final: Rouge ${this.scoreHome} - ${this.scoreAway} Bleu. ${result}`);
+    }
+
+    newGame() {
+        // Masquer le bouton "Nouveau match"
+        document.getElementById('new-game-btn').style.display = 'none';
+
+        // Réinitialiser le score
+        this.scoreHome = 0;
+        this.scoreAway = 0;
+
+        // Réinitialiser le chronomètre à 30 secondes
+        this.gameTime = 30;
+        this.updateTimerDisplay();
+
+        // Réinitialiser les flags de jeu
+        this.gameEnded = false;
+        this.isOvertime = false;
+        this.running = false;
+
+        // Remettre le palet au centre
+        this.puck.x = this.rink.width / 2;
+        this.puck.y = this.rink.height / 2;
+        this.puck.vx = 0;
+        this.puck.vy = 0;
+        this.puck.release();
+        this.puckCarrier = null;
+        this.teamWithPuck = null;
+        this.passTarget = null;
+        this.passPriorityTimer = 0;
+        this.passingTeam = null;
+        this.goalieWithPuck = null;
+        this.goalieHoldTimer = 0;
+
+        // Remettre les joueurs à leurs positions de départ
+        this.players.forEach(player => {
+            player.x = player.homeX;
+            player.y = player.homeY;
+            player.hasPuck = false;
+            player.passCooldown = 0;
+            player.possessionTime = 0;
+            player.contestedFrames = 0;
+        });
+
+        // Réinitialiser les lumières de but
+        this.goalLightTimerRed = 0;
+        this.goalLightTimerBlue = 0;
+
+        console.log(`🏒 Nouveau match ! Les scores sont remis à zéro.`);
     }
 }
 
