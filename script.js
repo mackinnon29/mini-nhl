@@ -581,13 +581,17 @@ class Player {
                 targetY = this.homeY + lateralOffset * 40;
             }
 
-            // Éviter l'agglutinement avec les coéquipiers
+            // Éviter l'agglutinement avec les coéquipiers (répulsion normalisée)
             const spreadDist = this.getSpreadDistance(rinkWidth);
             for (const mate of teammates) {
-                const distToMate = this.distanceTo(mate.x, mate.y);
-                if (distToMate < spreadDist && distToMate > 0) {
-                    targetX += (this.x - mate.x) * REPULSION_FORCE_FREE_PUCK;
-                    targetY += (this.y - mate.y) * REPULSION_FORCE_FREE_PUCK;
+                const dx = this.x - mate.x;
+                const dy = this.y - mate.y;
+                const distToMate = Math.sqrt(dx * dx + dy * dy);
+                if (distToMate < spreadDist && distToMate > 5) {
+                    // Force inversement proportionnelle : plus forte quand proche
+                    const repulsionStrength = (spreadDist - distToMate) / spreadDist;
+                    targetX += (dx / distToMate) * repulsionStrength * spreadDist * REPULSION_FORCE_FREE_PUCK;
+                    targetY += (dy / distToMate) * repulsionStrength * spreadDist * REPULSION_FORCE_FREE_PUCK;
                 }
             }
         } else if (game.teamWithPuck === this.team) {
@@ -814,13 +818,17 @@ class Player {
                     break;
             }
 
-            // Éviter l'agglutinement avec les coéquipiers
+            // Éviter l'agglutinement avec les coéquipiers (répulsion normalisée)
             const teammates = allPlayers.filter(p => p.team === this.team && p !== this && p.role !== 'goalie');
             const spreadDist = this.getSpreadDistance(rinkWidth);
             for (const mate of teammates) {
-                const dist = this.distanceTo(mate.x, mate.y);
-                if (dist < spreadDist && dist > 0) {
-                    targetY += (this.y - mate.y) * REPULSION_FORCE_ATTACKING;
+                const dx = this.x - mate.x;
+                const dy = this.y - mate.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < spreadDist && dist > 5) {
+                    const repulsionStrength = (spreadDist - dist) / spreadDist;
+                    targetX += (dx / dist) * repulsionStrength * spreadDist * REPULSION_FORCE_ATTACKING;
+                    targetY += (dy / dist) * repulsionStrength * spreadDist * REPULSION_FORCE_ATTACKING;
                 }
             }
         } else {
@@ -859,28 +867,17 @@ class Player {
             const defensiveSpread = rinkHeight * DEFENDER_OFFENSIVE_SPREAD;
             targetY = rinkHeight / 2 + (isTopDefender ? -defensiveSpread : defensiveSpread);
 
-            // Éviter l'agglutinement avec les coéquipiers
+            // Éviter l'agglutinement avec les coéquipiers (répulsion normalisée)
             const teammates = allPlayers.filter(p => p.team === this.team && p !== this && p.role !== 'goalie');
             const spreadDist = this.getSpreadDistance(rinkWidth);
             for (const mate of teammates) {
-                const dist = this.distanceTo(mate.x, mate.y);
-                if (dist < spreadDist && dist > 0) {
-                    targetY += (this.y - mate.y) * 0.6;
-                }
-            }
-
-            // BOOST DE VITESSE (SPRINT)
-            // Si on est loin de la cible (> 100px), on fonce !
-            // NOTE: Exécuté APRÈS le calcul de targetY pour éviter les valeurs NaN
-            if (Math.abs(this.x - targetX) > 100) {
-                const dx = targetX - this.x;
-                const dy = targetY - this.y;
+                const dx = this.x - mate.x;
+                const dy = this.y - mate.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist > 0) {
-                    // Vitesse très élevée pour se replacer (4.0 = très rapide)
-                    const sprintBonus = 4.0;
-                    this.x += (dx / dist) * sprintBonus;
-                    this.y += (dy / dist) * sprintBonus;
+                if (dist < spreadDist && dist > 5) {
+                    const repulsionStrength = (spreadDist - dist) / spreadDist;
+                    targetX += (dx / dist) * repulsionStrength * spreadDist * REPULSION_FORCE_DEFENDING;
+                    targetY += (dy / dist) * repulsionStrength * spreadDist * REPULSION_FORCE_DEFENDING;
                 }
             }
         }
@@ -993,15 +990,22 @@ class Player {
             }
         }
 
-        // Éviter l'agglutinement avec les coéquipiers
+        // Éviter l'agglutinement avec les coéquipiers (répulsion normalisée)
         const spreadDist = this.getSpreadDistance(rinkWidth);
         for (const mate of teammates) {
-            const dist = this.distanceTo(mate.x, mate.y);
-            if (dist < spreadDist && dist > 0) {
-                targetX += (this.x - mate.x) * 0.4;
-                targetY += (this.y - mate.y) * 0.4;
+            const dx = this.x - mate.x;
+            const dy = this.y - mate.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < spreadDist && dist > 5) {
+                const repulsionStrength = (spreadDist - dist) / spreadDist;
+                targetX += (dx / dist) * repulsionStrength * spreadDist * REPULSION_FORCE_DEFENSE;
+                targetY += (dy / dist) * repulsionStrength * spreadDist * REPULSION_FORCE_DEFENSE;
             }
         }
+
+        // Clamper les positions cibles dans les limites de la patinoire
+        targetX = Math.max(30, Math.min(rinkWidth - 30, targetX));
+        targetY = Math.max(30, Math.min(rinkHeight - 30, targetY));
 
         return { targetX, targetY };
     }
