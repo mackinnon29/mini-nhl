@@ -849,20 +849,6 @@ class Player {
                 }
             }
 
-            // BOOST DE VITESSE (SPRINT)
-            // Si on est loin de la cible (> 100px), on fonce !
-            if (Math.abs(this.x - targetX) > 100) {
-                const dx = targetX - this.x;
-                const dy = targetY - this.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist > 0) {
-                    // Vitesse très élevée pour se replacer (4.0 = très rapide)
-                    const sprintBonus = 4.0;
-                    this.x += (dx / dist) * sprintBonus;
-                    this.y += (dy / dist) * sprintBonus;
-                }
-            }
-
             // Positionnement vertical : haut/bas selon homeY initial
             const isTopDefender = this.homeY < rinkHeight / 2;
             const defensiveSpread = rinkHeight * DEFENDER_OFFENSIVE_SPREAD;
@@ -875,6 +861,21 @@ class Player {
                 const dist = this.distanceTo(mate.x, mate.y);
                 if (dist < spreadDist && dist > 0) {
                     targetY += (this.y - mate.y) * 0.6;
+                }
+            }
+
+            // BOOST DE VITESSE (SPRINT)
+            // Si on est loin de la cible (> 100px), on fonce !
+            // NOTE: Exécuté APRÈS le calcul de targetY pour éviter les valeurs NaN
+            if (Math.abs(this.x - targetX) > 100) {
+                const dx = targetX - this.x;
+                const dy = targetY - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 0) {
+                    // Vitesse très élevée pour se replacer (4.0 = très rapide)
+                    const sprintBonus = 4.0;
+                    this.x += (dx / dist) * sprintBonus;
+                    this.y += (dy / dist) * sprintBonus;
                 }
             }
         }
