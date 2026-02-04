@@ -692,7 +692,7 @@ class Player {
         }
 
         // Tir sous pression (2 adversaires proches) - 57% de chances
-        if (inShotZone && nearbyOpponents <= 2 && Math.random() < 0.57) {
+        if (inShotZone && nearbyOpponents === 2 && Math.random() < 0.57) {
             const shotY = goalY + (Math.random() - 0.5) * 80;
             this.hasPuck = false;
             puck.shoot(goalX, shotY, SHOT_POWER * 0.9);  // Tir légèrement moins puissant car sous pression
@@ -1857,6 +1857,8 @@ class Game {
             if (dist < PASS_RECEIVE_DISTANCE) {
                 this.passTarget.hasPuck = true;
                 this.passTarget.passCooldown = RECEIVE_PASS_COOLDOWN; // Cooldown après réception
+                this.passTarget.possessionTime = 0;
+                this.passTarget.contestedFrames = 0;
                 this.puckCarrier = this.passTarget;
                 this.teamWithPuck = this.passTarget.team;
                 this.puck.attachTo(this.passTarget);
@@ -1901,6 +1903,8 @@ class Game {
                 const isInterception = this.teamWithPuck && closestPlayer.team !== this.teamWithPuck;
 
                 closestPlayer.hasPuck = true;
+                closestPlayer.possessionTime = 0;
+                closestPlayer.contestedFrames = 0;
                 // Cooldown plus long pour les interceptions
                 if (isInterception) {
                     closestPlayer.passCooldown = INTERCEPTION_PASS_COOLDOWN;
@@ -1925,6 +1929,12 @@ class Game {
     checkGoalieHoldTimer() {
         // Si un gardien tient le palet
         if (this.goalieWithPuck && this.goalieHoldTimer > 0) {
+            // Vérifier si le gardien a toujours le palet (il a pu le perdre ou faire une passe)
+            if (!this.goalieWithPuck.hasPuck) {
+                this.goalieHoldTimer = 0;
+                this.goalieWithPuck = null;
+                return;
+            }
             this.goalieHoldTimer--;
 
             // Si le timer atteint 0, remettre au centre
