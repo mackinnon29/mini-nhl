@@ -212,6 +212,11 @@ class Rink {
         this.excitedTeamColor = teamColor;  // 'red' ou 'blue'
     }
 
+    reset() {
+        this.spectatorExcitementTimer = 0;
+        this.excitedTeamColor = null;
+    }
+
     drawIce() {
         const radius = 30; // Coins arrondis
         const x = this.rinkLeft;
@@ -2276,6 +2281,16 @@ class Game {
         this.hatTrickMessage = null;
         this.hatTrickTimer = 0;
         this.hatTrickPlayer = null;
+
+        // Réinitialiser les autres états de jeu (Correction de bugs)
+        this.goalCooldown = 0;
+        this.lastShooter = null;
+        this.goalMessage = null;
+        this.goalMessageTimer = 0;
+        this.overtimeMessageTimer = 0;
+
+        // Réinitialiser la patinoire (spectateurs)
+        this.rink.reset();
 
         console.log(`🏒 Nouveau match ! Les scores sont remis à zéro.`);
     }
