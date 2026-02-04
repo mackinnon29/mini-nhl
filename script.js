@@ -2261,8 +2261,8 @@ class Game {
         });
 
         // Réinitialiser les lumières de but
-        this.goalLightTimerRed = 0;
-        this.goalLightTimerBlue = 0;
+        this.goalLightLeft = 0;
+        this.goalLightRight = 0;
 
         // Réinitialiser les listes de buteurs
         this.scorersHome = [];
