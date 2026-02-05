@@ -43,6 +43,14 @@ const INTERCEPTION_COOLDOWN = 10;  // Frames pendant lesquelles les adversaires 
 const RECEIVE_PASS_COOLDOWN = 20;  // Frames avant que le receveur puisse repasser (~0.33s)
 const INTERCEPTION_PASS_COOLDOWN = 25; // Frames avant qu'un intercepteur puisse passer (~0.4s)
 
+// ==================== ÉQUIPES NHL ====================
+const NHL_TEAMS = [
+    "ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL",
+    "DAL", "DET", "EDM", "FLA", "LAK", "MIN", "MTL", "NJD",
+    "NSH", "NYI", "NYR", "OTT", "PHI", "PIT", "SEA", "SJS",
+    "STL", "TBL", "TOR", "UTA", "VAN", "VGK", "WPG", "WSH"
+];
+
 class Rink {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
@@ -1117,6 +1125,11 @@ class Game {
         this.players = [];
         this.initTeams();
 
+        // Équipes NHL sélectionnées
+        this.homeTeamTRI = "";
+        this.awayTeamTRI = "";
+        this.pickRandomTeams();
+
         this.puckCarrier = null;
         this.teamWithPuck = null;
 
@@ -1234,6 +1247,20 @@ class Game {
         const awayRW = new Player(w - 350, h / 2 + 100, 'away', 93, 'forward');
         awayRW.forwardPosition = 'RW';
         this.players.push(awayRW);
+    }
+
+    pickRandomTeams() {
+        // Sélectionner deux index différents aléatoirement
+        let homeIdx = Math.floor(Math.random() * NHL_TEAMS.length);
+        let awayIdx;
+        do {
+            awayIdx = Math.floor(Math.random() * NHL_TEAMS.length);
+        } while (awayIdx === homeIdx);
+
+        this.homeTeamTRI = NHL_TEAMS[homeIdx];
+        this.awayTeamTRI = NHL_TEAMS[awayIdx];
+
+        console.log(`🏒 Match sélectionné : ${this.homeTeamTRI} vs ${this.awayTeamTRI}`);
     }
 
     animate() {
@@ -1477,13 +1504,22 @@ class Game {
         ctx.fillStyle = '#cc0000';
         ctx.fillText(this.scoreHome.toString(), centerX - 40, 35);
 
+        // Abréviation équipe Home au-dessus du score
+        ctx.font = 'bold 12px Arial';
+        ctx.fillText(this.homeTeamTRI, centerX - 40, 35 - 18);
+
         // Tiret
+        ctx.font = 'bold 24px Arial';
         ctx.fillStyle = '#333';
         ctx.fillText('-', centerX, 35);
 
         // Score équipe Away (bleu)
         ctx.fillStyle = '#0033cc';
         ctx.fillText(this.scoreAway.toString(), centerX + 40, 35);
+
+        // Abréviation équipe Away au-dessus du score
+        ctx.font = 'bold 12px Arial';
+        ctx.fillText(this.awayTeamTRI, centerX + 40, 35 - 18);
     }
 
     drawGoalLights() {
@@ -2245,6 +2281,9 @@ class Game {
         // Réinitialiser le score
         this.scoreHome = 0;
         this.scoreAway = 0;
+
+        // Sélectionner de nouvelles équipes
+        this.pickRandomTeams();
 
         // Réinitialiser le chronomètre à 30 secondes
         this.gameTime = 30;
